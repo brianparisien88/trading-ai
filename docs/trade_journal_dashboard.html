@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Trade Ledger</title>
+<style>
+  :root{
+    --bg:#0A0C10; --surface:#12151B; --surface2:#171B22; --border:#232833;
+    --text:#E4E7EB; --muted:#7A8496; --dim:#4A5262;
+    --green:#3FB68B; --red:#E5484D; --amber:#D4A72C; --blue:#5B8DEF;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; -webkit-font-smoothing:antialiased;}
+  .mono{font-family:ui-monospace,'SF Mono','Roboto Mono','JetBrains Mono',Menlo,monospace;}
+  #app{max-width:1220px; margin:0 auto; padding:20px 16px 60px;}
+  h1{font-size:15px; font-weight:600; letter-spacing:.01em; margin:0 0 2px;}
+  .subtitle{color:var(--dim); font-size:12px; margin-bottom:16px;}
+
+  .tabs{display:flex; gap:2px; background:var(--border); border:1px solid var(--border); border-radius:9px;
+    padding:2px; margin-bottom:16px; width:fit-content;}
+  .tab{padding:8px 18px; border-radius:7px; font-size:13px; font-weight:500; color:var(--muted); cursor:pointer; user-select:none;}
+  .tab.active{background:var(--surface); color:var(--text);}
+
+  .hero{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--border);
+    border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:18px;}
+  .hero.hero5{grid-template-columns:repeat(5,1fr);}
+  .stat{background:var(--surface); padding:14px 12px;}
+  .stat-label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
+  .stat-val{font-size:17px; font-weight:600;}
+  .stat-sub{font-size:10.5px; color:var(--muted); margin-top:3px;}
+  .pos{color:var(--green);} .neg{color:var(--red);}
+
+  .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap;}
+  .synced{font-size:11.5px; color:var(--dim);}
+  input.search{background:var(--surface); border:1px solid var(--border); color:var(--text);
+    border-radius:7px; padding:7px 10px; font-size:13px; width:160px; outline:none;}
+  input.search:focus{border-color:var(--blue);}
+
+  table.ledger{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.ledger thead th{
+    text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim);
+    padding:8px 10px; border-bottom:1px solid var(--border); cursor:pointer; white-space:nowrap; user-select:none;
+  }
+  table.ledger thead th:hover{color:var(--text);}
+  table.ledger thead th.sorted{color:var(--blue);}
+  .arrow{font-size:9px; margin-left:3px; opacity:.7;}
+  table.ledger td{padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:middle;}
+  table.ledger tbody tr:hover{background:var(--surface);}
+  table.ledger tbody tr.main-row{cursor:pointer;}
+  .sym{font-weight:600; letter-spacing:.02em;}
+  .desc{color:var(--muted); font-size:11px;}
+  .badge{font-size:9.5px; padding:2px 6px; border-radius:4px; background:var(--surface2); color:var(--muted); display:inline-block;}
+  .badge.warn{background:rgba(212,167,44,.15); color:var(--amber);}
+  .journal-flag{font-size:10px; color:var(--dim);}
+  .journal-flag.filled{color:var(--green);}
+
+  .expand-row{display:none;}
+  .expand-row.open{display:table-row;}
+  .expand-cell{padding:10px 16px 16px !important; background:var(--surface2);}
+  .flag-note{font-size:11.5px; color:var(--amber); margin-bottom:8px; padding:6px 8px; background:rgba(212,167,44,.08); border-radius:6px;}
+  .field{margin-top:8px;}
+  .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim); margin-bottom:5px;}
+  .field textarea, .field select{width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; resize:vertical; outline:none;}
+  .field textarea{min-height:56px;}
+  .field textarea:focus, .field select:focus{border-color:var(--blue);}
+  .save-note{font-size:10.5px; color:var(--dim); margin-top:6px;}
+  .save-note.err{color:var(--red); font-weight:600;}
+
+  .more{display:block; width:100%; padding:10px; margin-top:10px; background:var(--surface);
+    border:1px solid var(--border); border-radius:8px; color:var(--muted); font-size:12.5px; cursor:pointer; text-align:center;}
+  .more:hover{color:var(--text); border-color:var(--dim);}
+
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .data-note{font-size:11px; color:var(--dim); margin-top:10px; font-style:italic;}
+
+  @media(max-width:800px){
+    .hero, .hero5{grid-template-columns:repeat(2,1fr);}
+    .col-hide{display:none;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Trade Ledger</h1>
+  <div class="subtitle">IBKR options &middot; live positions + FIFO-paired trade history</div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="open" onclick="switchTab('open')">Open Trades</div>
+    <div class="tab" data-tab="closed" onclick="switchTab('closed')">Trade History</div>
+  </div>
+
+  <!-- OPEN TAB -->
+  <div class="panel active" id="panel-open">
+    <div class="hero" id="heroOpen"></div>
+    <div class="toolbar">
+      <input class="search" id="searchOpen" placeholder="Filter symbol...">
+      <div class="synced" id="syncedOpen"></div>
+    </div>
+    <table class="ledger" id="tableOpen">
+      <thead><tr id="theadOpen"></tr></thead>
+      <tbody id="rowsOpen"></tbody>
+    </table>
+    <div class="data-note">Entry price is IBKR's actual average cost basis (includes commission), not a reconstructed estimate. IV/Vol/OI are today's option-level snapshot.</div>
+  </div>
+
+  <!-- CLOSED TAB -->
+  <div class="panel" id="panel-closed">
+    <div class="hero hero5" id="heroClosed"></div>
+    <div class="toolbar">
+      <input class="search" id="searchClosed" placeholder="Filter symbol...">
+      <div class="synced" id="syncedClosed"></div>
+    </div>
+    <table class="ledger" id="tableClosed">
+      <thead><tr id="theadClosed"></tr></thead>
+      <tbody id="rowsClosed"></tbody>
+    </table>
+    <div class="more" id="loadMore" style="display:none;">Show more</div>
+    <div class="data-note">Contract detail (strike/expiry) isn't available for these closed trades &mdash; IBKR's trade-history endpoint only returns the underlying ticker. Trades closed going forward can carry this through from the open-position snapshot.</div>
+  </div>
+</div>
+
+<script>
+const CLOSED_RAW = [];
+const OPEN_RAW = [];
+const ACCOUNT = {"net_liq": 4582.48, "avail": 1486.18, "currency": "CAD"};
+let PAGE = 60, visibleClosed = PAGE, filterClosed = "", filterOpen = "";
+let sortOpen = {key:'unrealized_pnl', dir:1};
+let sortClosed = {key:'exit_time', dir:-1};
+
+function fmt(n){ return (n<0?"-$":"$") + Math.abs(n).toFixed(2); }
+function fmtDateShort(iso){ if(!iso) return '—'; const d=new Date(iso);
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
+function daysHeld(iso){ if(!iso) return null; const ms = Date.now()-new Date(iso).getTime(); return Math.floor(ms/86400000); }
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+  document.getElementById('panel-open').classList.toggle('active', name==='open');
+  document.getElementById('panel-closed').classList.toggle('active', name==='closed');
+}
+
+/* ---------- OPEN TAB ---------- */
+const OPEN_COLS = [
+  {key:'sym', label:'Ticker'},
+  {key:'desc', label:'Contract', hide:true},
+  {key:'entry_px', label:'Entry'},
+  {key:'dte', label:'DTE'},
+  {key:'iv', label:'IV'},
+  {key:'vol', label:'Vol'},
+  {key:'oi', label:'OI'},
+  {key:'daily_pnl', label:'Today', hide:true},
+  {key:'unrealized_pnl', label:'P&L'},
+];
+
+function renderHeroOpen(){
+  const totalUnreal = OPEN_RAW.reduce((a,o)=>a+o.unrealized_pnl,0);
+  const totalCostBasis = OPEN_RAW.reduce((a,o)=>a+o.cost_basis,0);
+  document.getElementById('heroOpen').innerHTML = `
+    <div class="stat"><div class="stat-label">Account Balance</div>
+      <div class="stat-val mono">${ACCOUNT.currency} ${ACCOUNT.net_liq.toFixed(2)}</div>
+      <div class="stat-sub">net liquidation</div></div>
+    <div class="stat"><div class="stat-label">Current P&amp;L</div>
+      <div class="stat-val mono ${totalUnreal>=0?'pos':'neg'}">USD ${totalUnreal>=0?'':'-'}$${Math.abs(totalUnreal).toFixed(2)}</div>
+      <div class="stat-sub">unrealized, live</div></div>
+    <div class="stat"><div class="stat-label"># Open Trades</div>
+      <div class="stat-val mono">${OPEN_RAW.length}</div>
+      <div class="stat-sub">positions</div></div>
+    <div class="stat"><div class="stat-label">Capital Deployed</div>
+      <div class="stat-val mono">USD ${fmt(totalCostBasis).replace('$','')}</div>
+      <div class="stat-sub">cost basis</div></div>
+    <div class="stat"><div class="stat-label">Capital Available</div>
+      <div class="stat-val mono">${ACCOUNT.currency} ${ACCOUNT.avail.toFixed(2)}</div>
+      <div class="stat-sub">buying power</div></div>
+    <div class="stat"><div class="stat-label">Avg Days Held</div>
+      <div class="stat-val mono">${(()=>{const w=OPEN_RAW.filter(o=>o.entry_time); return w.length? (w.reduce((a,o)=>a+daysHeld(o.entry_time),0)/w.length).toFixed(0):'—';})()}d</div>
+      <div class="stat-sub">${OPEN_RAW.filter(o=>o.entry_time).length}/${OPEN_RAW.length} dated</div></div>`;
+}
+
+function renderTheadOpen(){
+  document.getElementById('theadOpen').innerHTML = OPEN_COLS.map(c => {
+    const active = sortOpen.key===c.key;
+    const arrow = active ? (sortOpen.dir===1?'▲':'▼') : '';
+    return `<th class="${active?'sorted':''} ${c.hide?'col-hide':''}" onclick="sortOpenBy('${c.key}')">${c.label}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
+}
+function sortOpenBy(key){
+  if(sortOpen.key===key){ sortOpen.dir *= -1; } else { sortOpen = {key, dir: key==='sym'||key==='desc' ? 1 : -1}; }
+  renderTheadOpen(); renderRowsOpen();
+}
+
+function renderRowsOpen(){
+  let filtered = OPEN_RAW.filter(o => !filterOpen || o.sym.toLowerCase().includes(filterOpen.toLowerCase()));
+  filtered = filtered.slice().sort((a,b)=>{
+    let av=a[sortOpen.key], bv=b[sortOpen.key];
+    if(av==null) av = -Infinity; if(bv==null) bv = -Infinity;
+    if(typeof av === 'string') return av.localeCompare(bv) * sortOpen.dir;
+    return (av-bv) * sortOpen.dir;
+  });
+  document.getElementById('rowsOpen').innerHTML = filtered.map(o => `<tr>
+      <td class="sym">${o.sym}</td>
+      <td class="desc col-hide">${o.desc}</td>
+      <td class="mono" style="color:var(--muted)">@${o.entry_px}</td>
+      <td class="mono">${o.dte!=null ? o.dte+'d' : '—'}</td>
+      <td class="mono" style="color:var(--muted)">${o.iv!=null ? (o.iv*100).toFixed(0)+'%' : '—'}</td>
+      <td class="mono" style="color:var(--muted)">${o.vol!=null ? o.vol : '—'}</td>
+      <td class="mono" style="color:var(--muted)">${o.oi!=null ? o.oi.toLocaleString() : '—'}</td>
+      <td class="mono ${o.daily_pnl>=0?'pos':'neg'} col-hide">${fmt(o.daily_pnl)}</td>
+      <td class="mono ${o.unrealized_pnl>=0?'pos':'neg'}">${fmt(o.unrealized_pnl)}</td>
+    </tr>`).join('');
+}
+
+/* ---------- CLOSED TAB ---------- */
+const CLOSED_COLS = [
+  {key:'exit_time', label:'Date Closed'},
+  {key:'entry_time', label:'Date Opened'},
+  {key:'sym', label:'Ticker'},
+  {key:'desc', label:'Contract', hide:true},
+  {key:'days_held', label:'Days Held'},
+  {key:'pnl', label:'P&L'},
+  {key:'return_pct', label:'Return %'},
+  {key:'strategy', label:'Strategy'},
+];
+
+function computeStats(trades){
+  const totalPnl = trades.reduce((a,t)=>a+t.pnl,0);
+  const totalComm = trades.reduce((a,t)=>a+t.comm,0);
+  const wins = trades.filter(t=>t.pnl>0);
+  const losses = trades.filter(t=>t.pnl<0);
+  const winRate = trades.length ? (wins.length/trades.length*100) : 0;
+  const avgWin = wins.length ? wins.reduce((a,t)=>a+t.pnl,0)/wins.length : 0;
+  const avgLoss = losses.length ? losses.reduce((a,t)=>a+t.pnl,0)/losses.length : 0;
+  const grossWin = wins.reduce((a,t)=>a+t.pnl,0);
+  const grossLoss = Math.abs(losses.reduce((a,t)=>a+t.pnl,0));
+  const profitFactor = grossLoss>0 ? grossWin/grossLoss : (grossWin>0?Infinity:0);
+  return {totalPnl, totalComm, winRate, avgWin, avgLoss, count: trades.length, profitFactor};
+}
+
+function renderHeroClosed(){
+  const s = computeStats(CLOSED_RAW);
+  const net = s.totalPnl - s.totalComm;
+  document.getElementById('heroClosed').innerHTML = `
+    <div class="stat"><div class="stat-label">Realized P&amp;L (to date)</div>
+      <div class="stat-val mono ${s.totalPnl>=0?'pos':'neg'}">${fmt(s.totalPnl)}</div>
+      <div class="stat-sub">before commissions</div></div>
+    <div class="stat"><div class="stat-label">Net Commissions</div>
+      <div class="stat-val mono">${fmt(-s.totalComm)}</div>
+      <div class="stat-sub">net after: ${fmt(net)}</div></div>
+    <div class="stat"><div class="stat-label">Win Rate</div>
+      <div class="stat-val mono">${s.winRate.toFixed(1)}%</div>
+      <div class="stat-sub">${s.count} closed trades</div></div>
+    <div class="stat"><div class="stat-label">Avg Win / Loss</div>
+      <div class="stat-val mono"><span class="pos">${fmt(s.avgWin)}</span> <span style="color:var(--dim)">/</span> <span class="neg">${fmt(s.avgLoss)}</span></div>
+      <div class="stat-sub">per trade</div></div>
+    <div class="stat"><div class="stat-label">Profit Factor</div>
+      <div class="stat-val mono ${s.profitFactor>=1?'pos':'neg'}">${isFinite(s.profitFactor)?s.profitFactor.toFixed(2):'∞'}</div>
+      <div class="stat-sub">gross win / gross loss</div></div>`;
+}
+
+function rrText(j, entryPx, exitPx){
+  const stop = parseFloat(j.stop), target = parseFloat(j.target);
+  if(isNaN(stop) || isNaN(target) || entryPx==null) return 'Enter a planned stop and target to see intended R:R';
+  const risk = Math.abs(entryPx - stop);
+  const reward = Math.abs(target - entryPx);
+  if(risk === 0) return 'Stop equals entry — check your numbers';
+  const plannedRR = (reward/risk).toFixed(2);
+  let actualStr = '';
+  if(exitPx!=null){
+    const actualMove = exitPx - entryPx;
+    const actualR = (actualMove/risk).toFixed(2);
+    actualStr = ` · actual outcome: ${actualR}R`;
+  }
+  return `Planned R:R = 1:${plannedRR}${actualStr}`;
+}
+
+async function loadJournal(id){
+  try{ const r = await window.storage.get('journal2:'+id); return r ? JSON.parse(r.value) : {strategy:'',thoughts:'',stop:'',target:''}; }
+  catch(e){ return {strategy:'',thoughts:'',stop:'',target:''}; }
+}
+async function saveJournalWithRetry(id, obj, attempt){
+  attempt = attempt || 1;
+  try{
+    await window.storage.set('journal2:'+id, JSON.stringify(obj));
+    return true;
+  }catch(e){
+    if(attempt < 3){
+      await new Promise(r=>setTimeout(r, 400*attempt));
+      return saveJournalWithRetry(id, obj, attempt+1);
+    }
+    return false;
+  }
+}
+
+const journalCache = {};
+const openRowsState = {};
+
+function renderTheadClosed(){
+  document.getElementById('theadClosed').innerHTML = CLOSED_COLS.map(c => {
+    const active = sortClosed.key===c.key;
+    const arrow = active ? (sortClosed.dir===1?'▲':'▼') : '';
+    const sortable = c.key !== 'strategy';
+    return `<th class="${active?'sorted':''} ${c.hide?'col-hide':''}" ${sortable?`onclick="sortClosedBy('${c.key}')"`:'style="cursor:default;"'}>${c.label}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
+}
+function sortClosedBy(key){
+  if(sortClosed.key===key){ sortClosed.dir *= -1; } else { sortClosed = {key, dir: key==='sym' ? 1 : -1}; }
+  renderTheadClosed(); renderRowsClosed();
+}
+
+async function toggleRow(id){
+  const rowEl = document.getElementById('exp-'+id);
+  const isOpen = rowEl.classList.contains('open');
+  if(isOpen){ rowEl.classList.remove('open'); openRowsState[id]=false; return; }
+  rowEl.classList.add('open'); openRowsState[id]=true;
+  if(journalCache[id] === undefined){ journalCache[id] = await loadJournal(id); }
+  const t = CLOSED_RAW.find(x=>x.id===id);
+  renderBody(id, t && t.ambiguous ? ('Flagged: ' + t.reason + '. Verify against your broker before trusting this P&L split.') : null);
+}
+
+function renderBody(id, ambNote){
+  const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
+  const cell = document.getElementById('cell-'+id);
+  if(!cell) return;
+  const t = CLOSED_RAW.find(x=>x.id===id);
+  const entryPx = t ? t.entry_px : null;
+  const exitPx = t ? t.exit_px : null;
+  cell.innerHTML = (ambNote ? `<div class="flag-note">${ambNote}</div>` : '') + `
+    <div class="field"><label>Strategy</label>
+      <select data-field="strategy" data-id="${id}">
+        <option value="">--</option>
+        <option value="Base 1/2" ${j.strategy==='Base 1/2'?'selected':''}>Base 1/2</option>
+        <option value="Later base" ${j.strategy==='Later base'?'selected':''}>Later base</option>
+        <option value="RS breakout" ${j.strategy==='RS breakout'?'selected':''}>RS breakout</option>
+        <option value="Wyckoff spring" ${j.strategy==='Wyckoff spring'?'selected':''}>Wyckoff spring / accumulation</option>
+        <option value="Elliott Wave divergence" ${j.strategy==='Elliott Wave divergence'?'selected':''}>Elliott Wave divergence</option>
+        <option value="HH/HL reversal" ${j.strategy==='HH/HL reversal'?'selected':''}>HH/HL reversal</option>
+        <option value="Momentum scalp" ${j.strategy==='Momentum scalp'?'selected':''}>Momentum scalp</option>
+        <option value="Other" ${j.strategy==='Other'?'selected':''}>Other</option>
+      </select></div>
+    <div class="fieldgrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div class="field"><label>Planned Stop ($)</label>
+        <input type="number" step="0.01" data-field="stop" data-id="${id}" value="${j.stop||''}"
+          style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;"></div>
+      <div class="field"><label>Planned Target ($)</label>
+        <input type="number" step="0.01" data-field="target" data-id="${id}" value="${j.target||''}"
+          style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;"></div>
+    </div>
+    <div class="save-note" id="rr-${id}" style="margin-top:6px;">${rrText(j, entryPx, exitPx)}</div>
+    <div class="field"><label>Journaling thoughts</label>
+      <textarea data-field="thoughts" data-id="${id}" placeholder="Why I took this, why I got out, what I'd do differently...">${j.thoughts||''}</textarea></div>
+    <div class="save-note" id="save-${id}">Autosaves as you type</div>`;
+  cell.querySelectorAll('textarea,select,input').forEach(el=>{
+    let t;
+    el.addEventListener('input', ()=>{
+      clearTimeout(t);
+      const note = document.getElementById('save-'+id);
+      t = setTimeout(async ()=>{
+        const fid = el.getAttribute('data-id');
+        journalCache[fid][el.getAttribute('data-field')] = el.value;
+        if(note){ note.textContent = 'Saving...'; note.classList.remove('err'); note.style.color='var(--dim)'; }
+        const ok = await saveJournalWithRetry(fid, journalCache[fid]);
+        if(note){
+          if(ok){
+            note.textContent = 'Saved'; note.classList.remove('err'); note.style.color='var(--green)';
+            setTimeout(()=>{note.textContent='Autosaves as you type'; note.style.color='var(--dim)';},1200);
+          } else {
+            note.textContent = 'Not saved — keep this tab open and try editing again'; note.classList.add('err');
+          }
+        }
+        updateFlag(fid);
+        updateStrategyCell(fid);
+        const rrEl = document.getElementById('rr-'+fid);
+        if(rrEl){ rrEl.textContent = rrText(journalCache[fid], entryPx, exitPx); }
+      }, 500);
+    });
+  });
+}
+
+function hasJournalContent(j){ return j && (j.strategy || j.thoughts); }
+function updateFlag(id){
+  const flag = document.getElementById('flag-'+id);
+  if(!flag) return;
+  const j = journalCache[id];
+  if(hasJournalContent(j)){ flag.textContent='logged'; flag.classList.add('filled'); }
+  else { flag.textContent='—'; flag.classList.remove('filled'); }
+}
+function updateStrategyCell(id){
+  const cell = document.getElementById('strat-'+id);
+  if(!cell) return;
+  const j = journalCache[id];
+  cell.textContent = (j && j.strategy) ? j.strategy : '—';
+}
+
+function fmtReturn(v){
+  if(v==null) return '—';
+  const cls = v>=0 ? 'pos' : 'neg';
+  return `<span class="${cls}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+}
+
+async function renderRowsClosed(){
+  let filtered = CLOSED_RAW.filter(t => !filterClosed || t.sym.toLowerCase().includes(filterClosed.toLowerCase()));
+  filtered = filtered.slice().sort((a,b)=>{
+    let av=a[sortClosed.key], bv=b[sortClosed.key];
+    if(av==null) av = sortClosed.key.includes('time') ? '' : -Infinity;
+    if(bv==null) bv = sortClosed.key.includes('time') ? '' : -Infinity;
+    if(typeof av === 'string') return av.localeCompare(bv) * sortClosed.dir;
+    return (av-bv) * sortClosed.dir;
+  });
+  const slice = filtered.slice(0, visibleClosed);
+  let html = '';
+  for(const t of slice){
+    if(journalCache[t.id] === undefined){ journalCache[t.id] = await loadJournal(t.id); }
+    const j = journalCache[t.id];
+    html += `<tr class="main-row" id="main-${t.id}" onclick="toggleRow('${t.id}')">
+      <td class="mono">${fmtDateShort(t.exit_time)}</td>
+      <td class="mono">${fmtDateShort(t.entry_time)}</td>
+      <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''}</td>
+      <td class="desc col-hide">—</td>
+      <td class="mono">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
+      <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
+      <td class="mono">${fmtReturn(t.return_pct)}</td>
+      <td id="strat-${t.id}">${j.strategy || '—'}</td>
+    </tr>
+    <tr class="expand-row" id="exp-${t.id}"><td class="expand-cell" colspan="8" id="cell-${t.id}"></td></tr>`;
+  }
+  document.getElementById('rowsClosed').innerHTML = html;
+
+  document.getElementById('loadMore').style.display = filtered.length > visibleClosed ? 'block' : 'none';
+  for(const t of slice){
+    updateFlag(t.id);
+    if(openRowsState[t.id]){
+      document.getElementById('exp-'+t.id).classList.add('open');
+      renderBody(t.id, t.ambiguous ? ('Flagged: ' + t.reason + '. Verify against your broker before trusting this P&L split.') : null);
+    }
+  }
+}
+
+document.getElementById('loadMore').addEventListener('click', ()=>{ visibleClosed += PAGE; renderRowsClosed(); });
+document.getElementById('searchClosed').addEventListener('input', (e)=>{ filterClosed = e.target.value; visibleClosed = PAGE; renderRowsClosed(); });
+document.getElementById('searchOpen').addEventListener('input', (e)=>{ filterOpen = e.target.value; renderRowsOpen(); });
+
+async function init(){
+  renderHeroOpen(); renderTheadOpen(); renderRowsOpen();
+  document.getElementById('syncedOpen').textContent = OPEN_RAW.length + ' positions · live as of sync';
+  renderHeroClosed(); renderTheadClosed();
+  document.getElementById('syncedClosed').textContent = CLOSED_RAW.length + ' round trips · synced ' + new Date().toLocaleDateString();
+  await renderRowsClosed();
+}
+init();
+</script>
+</body></html>
