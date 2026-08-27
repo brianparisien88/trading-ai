@@ -224,6 +224,46 @@ def flex_to_raw_positions(root: ET.Element) -> list[dict]:
     return out
 
 
+def flex_to_account_summary(root: ET.Element, now_iso: str) -> dict | None:
+    """
+    Account-level balances in BASE currency, from the NAV + Cash Report sections.
+      net_liquidation  <- latest EquitySummaryByReportDateInBase.total
+      available_funds  <- CashReport BASE_SUMMARY endingSettledCash (fallback endingCash)
+    Returns None if neither section is present (query not updated yet) -- the
+    caller then leaves the existing account_summary row untouched.
+    """
+    nav_rows = [e.attrib for e in root.iter("EquitySummaryByReportDateInBase")]
+    latest_nav = max(nav_rows, key=lambda a: a.get("reportDate", ""), default=None)
+
+    cash_base = None
+    for c in root.iter("CashReportCurrency"):
+        if (c.attrib.get("currency") or "").upper() == "BASE_SUMMARY":
+            cash_base = c.attrib
+            break
+
+    if latest_nav is None and cash_base is None:
+        return None
+
+    def _date(v):
+        v = (v or "").strip()
+        if len(v) == 8 and v.isdigit():
+            return f"{v[:4]}-{v[4:6]}-{v[6:]}"
+        return v or None
+
+    row = {"id": "current", "synced_at": now_iso}
+    if latest_nav is not None:
+        row["net_liquidation"] = _to_float(latest_nav.get("total"), None)
+        row["currency"] = latest_nav.get("currency")
+        row["as_of"] = _date(latest_nav.get("reportDate"))
+    if cash_base is not None:
+        row["available_funds"] = _to_float(
+            cash_base.get("endingSettledCash") or cash_base.get("endingCash"), None
+        )
+        row.setdefault("currency", cash_base.get("currency"))
+        row.setdefault("as_of", _date(cash_base.get("toDate")))
+    return row
+
+
 # ---------------------------------------------------------------------------
 # pipeline output -> Supabase rows
 # ---------------------------------------------------------------------------
@@ -362,6 +402,14 @@ def main() -> None:
         sb.upsert("open_positions", open_rows)
     removed = sb.delete_not_in("open_positions", [r["id"] for r in open_rows])
     log(f"open_positions: upserted {len(open_rows)}, removed {removed} stale")
+
+    acct = flex_to_account_summary(root, now_iso)
+    if acct is None:
+        log("account_summary: NAV / Cash Report sections not in the Flex query -- skipped")
+    else:
+        sb.upsert("account_summary", [acct])
+        log(f"account_summary: net_liq={acct.get('net_liquidation')} "
+            f"avail={acct.get('available_funds')} {acct.get('currency')}")
 
     log("done")
 

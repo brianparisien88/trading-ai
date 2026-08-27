@@ -116,7 +116,7 @@
 
   <!-- OPEN TAB -->
   <div class="panel active" id="panel-open">
-    <div class="hero hero4" id="heroOpen"></div>
+    <div class="hero" id="heroOpen"></div>
     <div class="toolbar">
       <input class="search" id="searchOpen" placeholder="Filter symbol...">
       <div class="synced" id="syncedOpen"></div>
@@ -160,6 +160,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 /* ---------- state ---------- */
 let CLOSED_RAW = [];
 let OPEN_RAW = [];
+let ACCOUNT = null;   // { net_liquidation, available_funds, currency, as_of } — null until synced
 let session = null;
 let PAGE = 60, visibleClosed = PAGE, filterClosed = "", filterOpen = "";
 let sortOpen = {key:'unrealized_pnl', dir:1};
@@ -226,12 +227,14 @@ function mapClosed(r){
 /* ---------- data load ---------- */
 async function loadData(){
   hideBanner();
-  const [openRes, closedRes] = await Promise.all([
+  const [openRes, closedRes, acctRes] = await Promise.all([
     db.from('open_positions').select('*'),
     db.from('closed_trades').select('*'),
+    db.from('account_summary').select('*').eq('id', 'current').maybeSingle(),
   ]);
   if(openRes.error)   throw new Error('open_positions: ' + openRes.error.message);
   if(closedRes.error) throw new Error('closed_trades: ' + closedRes.error.message);
+  ACCOUNT = acctRes && !acctRes.error ? acctRes.data : null;  // may be null until first sync with NAV/Cash sections
   OPEN_RAW = (openRes.data || []).map(mapOpen);
   CLOSED_RAW = (closedRes.data || []).map(mapClosed);
   // seed journal cache from the rows
@@ -312,7 +315,15 @@ function renderHeroOpen(){
   const totalCostBasis = OPEN_RAW.reduce((a,o)=>a+o.cost_basis,0);
   const dated = OPEN_RAW.filter(o=>o.entry_time);
   const avgDays = dated.length ? (dated.reduce((a,o)=>a+daysHeld(o.entry_time),0)/dated.length).toFixed(0) : '—';
+  const cur = (ACCOUNT && ACCOUNT.currency) || 'CAD';
+  const acctMoney = v => (v==null ? '—' : `${cur} ${Number(v).toFixed(2)}`);
+  const asOf = ACCOUNT && ACCOUNT.as_of
+    ? `as of ${new Date(ACCOUNT.as_of + 'T00:00:00').toLocaleDateString()}`
+    : 'awaiting first sync';
   document.getElementById('heroOpen').innerHTML = `
+    <div class="stat"><div class="stat-label">Account Balance</div>
+      <div class="stat-val mono">${acctMoney(ACCOUNT && ACCOUNT.net_liquidation)}</div>
+      <div class="stat-sub">net liquidation · ${asOf}</div></div>
     <div class="stat"><div class="stat-label">Unrealized P&amp;L</div>
       <div class="stat-val mono ${totalUnreal>=0?'pos':'neg'}">USD ${totalUnreal>=0?'':'-'}$${Math.abs(totalUnreal).toFixed(2)}</div>
       <div class="stat-sub">live, all open positions</div></div>
@@ -322,6 +333,9 @@ function renderHeroOpen(){
     <div class="stat"><div class="stat-label">Capital Deployed</div>
       <div class="stat-val mono">USD ${totalCostBasis.toFixed(2)}</div>
       <div class="stat-sub">cost basis</div></div>
+    <div class="stat"><div class="stat-label">Capital Available</div>
+      <div class="stat-val mono">${acctMoney(ACCOUNT && ACCOUNT.available_funds)}</div>
+      <div class="stat-sub">settled cash · ${asOf}</div></div>
     <div class="stat"><div class="stat-label">Avg Days Held</div>
       <div class="stat-val mono">${avgDays}${avgDays==='—'?'':'d'}</div>
       <div class="stat-sub">open positions</div></div>`;
