@@ -140,7 +140,7 @@
       <tbody id="rowsClosed"></tbody>
     </table>
     <div class="more" id="loadMore" style="display:none;">Show more</div>
-    <div class="data-note">Contract detail (strike/expiry) isn't available for closed trades whose <span class="mono">contract_description</span> is empty &mdash; IBKR's trade-history endpoint only returns the underlying ticker. Trades closed going forward can carry this through from the open-position snapshot.</div>
+    <div class="data-note">Rows flagged <span class="badge warn">check</span> were paired against more than one open lot &mdash; verify the P&amp;L split against your broker.</div>
   </div>
 </div>
 
@@ -384,7 +384,6 @@ const CLOSED_COLS = [
   {key:'exit_time', label:'Date Closed'},
   {key:'entry_time', label:'Date Opened'},
   {key:'sym', label:'Ticker'},
-  {key:'desc', label:'Contract', hide:true},
   {key:'days_held', label:'Days Held'},
   {key:'pnl', label:'P&L'},
   {key:'return_pct', label:'Return %'},
@@ -598,12 +597,10 @@ function renderRowsClosed(){
   let html = '';
   for(const t of slice){
     const j = journalCache[t.id] || {strategy:'',thoughts:'',stop:'',target:''};
-    const contract = t.contract_description ? t.contract_description.replace(t.sym+' ','') : '—';
     html += `<tr class="main-row" id="main-${t.id}" onclick="toggleRow('${t.id}')">
       <td class="mono">${fmtDateShort(t.exit_time)}</td>
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
       <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
-      <td class="desc col-hide">${contract}</td>
       <td class="mono">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
       <td class="mono">${fmtReturn(t.return_pct)}</td>
