@@ -19,7 +19,7 @@ stored in Supabase, shown on a static dashboard.
 - [x] Schema written + applied (2026-08-27) — `supabase/migrations/`, tables live, RLS verified
 - [x] Dashboard rebuilt to read live from Supabase (`app/index.html`) — supabase-js, publishable key, email/password login for journal edits
 - [ ] User creates the auth login user + disables public signups (`supabase/README.md`)
-- [ ] Turn on GitHub Pages (Settings → Pages → Source: **GitHub Actions**)
+- [x] GitHub Pages live — https://brianparisien88.github.io/trading-ai/ (Actions deploy from `app/`)
 - [ ] Deterministic IBKR sync script + GitHub Actions cron
 - [ ] (Deferred) Historical 242-trade migration
 
