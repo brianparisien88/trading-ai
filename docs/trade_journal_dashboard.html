@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Trade Ledger</title>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Trade Ledger</title>
 <style>
   :root{
     --bg:#0A0C10; --surface:#12151B; --surface2:#171B22; --border:#232833;
@@ -14,6 +14,24 @@
   h1{font-size:15px; font-weight:600; letter-spacing:.01em; margin:0 0 2px;}
   .subtitle{color:var(--dim); font-size:12px; margin-bottom:16px;}
 
+  /* auth bar */
+  .authbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px;
+    background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 12px; margin-bottom:16px;}
+  .authbar .who{color:var(--muted);}
+  .authbar .who b{color:var(--text); font-weight:600;}
+  .authbar input{background:var(--bg); border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:6px 9px; font-size:12.5px; outline:none;}
+  .authbar input:focus{border-color:var(--blue);}
+  .authbar button{background:var(--surface2); border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:6px 12px; font-size:12.5px; cursor:pointer;}
+  .authbar button:hover{border-color:var(--dim);}
+  .authbar .err{color:var(--red);}
+  .authbar .ok{color:var(--green);}
+
+  .banner{background:rgba(229,72,77,.1); border:1px solid rgba(229,72,77,.4); color:var(--red);
+    border-radius:8px; padding:10px 12px; font-size:12.5px; margin-bottom:16px; display:none;}
+  .banner.show{display:block;}
+
   .tabs{display:flex; gap:2px; background:var(--border); border:1px solid var(--border); border-radius:9px;
     padding:2px; margin-bottom:16px; width:fit-content;}
   .tab{padding:8px 18px; border-radius:7px; font-size:13px; font-weight:500; color:var(--muted); cursor:pointer; user-select:none;}
@@ -22,6 +40,7 @@
   .hero{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--border);
     border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:18px;}
   .hero.hero5{grid-template-columns:repeat(5,1fr);}
+  .hero.hero4{grid-template-columns:repeat(4,1fr);}
   .stat{background:var(--surface); padding:14px 12px;}
   .stat-label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
   .stat-val{font-size:17px; font-weight:600;}
@@ -51,17 +70,20 @@
   .badge.warn{background:rgba(212,167,44,.15); color:var(--amber);}
   .journal-flag{font-size:10px; color:var(--dim);}
   .journal-flag.filled{color:var(--green);}
+  .empty{padding:24px 10px; text-align:center; color:var(--dim); font-size:12.5px;}
 
   .expand-row{display:none;}
   .expand-row.open{display:table-row;}
   .expand-cell{padding:10px 16px 16px !important; background:var(--surface2);}
   .flag-note{font-size:11.5px; color:var(--amber); margin-bottom:8px; padding:6px 8px; background:rgba(212,167,44,.08); border-radius:6px;}
+  .lock-note{font-size:11px; color:var(--dim); margin-bottom:8px; padding:6px 8px; background:var(--surface); border-radius:6px;}
   .field{margin-top:8px;}
   .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim); margin-bottom:5px;}
   .field textarea, .field select{width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text);
     border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; resize:vertical; outline:none;}
   .field textarea{min-height:56px;}
   .field textarea:focus, .field select:focus{border-color:var(--blue);}
+  .field textarea:disabled, .field select:disabled, .field input:disabled{opacity:.55; cursor:not-allowed;}
   .save-note{font-size:10.5px; color:var(--dim); margin-top:6px;}
   .save-note.err{color:var(--red); font-weight:600;}
 
@@ -74,7 +96,7 @@
   .data-note{font-size:11px; color:var(--dim); margin-top:10px; font-style:italic;}
 
   @media(max-width:800px){
-    .hero, .hero5{grid-template-columns:repeat(2,1fr);}
+    .hero, .hero5, .hero4{grid-template-columns:repeat(2,1fr);}
     .col-hide{display:none;}
   }
 </style>
@@ -84,6 +106,9 @@
   <h1>Trade Ledger</h1>
   <div class="subtitle">IBKR options &middot; live positions + FIFO-paired trade history</div>
 
+  <div class="authbar" id="authbar"></div>
+  <div class="banner" id="banner"></div>
+
   <div class="tabs">
     <div class="tab active" data-tab="open" onclick="switchTab('open')">Open Trades</div>
     <div class="tab" data-tab="closed" onclick="switchTab('closed')">Trade History</div>
@@ -91,7 +116,7 @@
 
   <!-- OPEN TAB -->
   <div class="panel active" id="panel-open">
-    <div class="hero" id="heroOpen"></div>
+    <div class="hero hero4" id="heroOpen"></div>
     <div class="toolbar">
       <input class="search" id="searchOpen" placeholder="Filter symbol...">
       <div class="synced" id="syncedOpen"></div>
@@ -100,7 +125,7 @@
       <thead><tr id="theadOpen"></tr></thead>
       <tbody id="rowsOpen"></tbody>
     </table>
-    <div class="data-note">Entry price is IBKR's actual average cost basis (includes commission), not a reconstructed estimate. IV/Vol/OI are today's option-level snapshot.</div>
+    <div class="data-note">Entry price is IBKR's actual average cost basis (includes commission), not a reconstructed estimate. IV/Vol/OI are the last synced option-level snapshot.</div>
   </div>
 
   <!-- CLOSED TAB -->
@@ -115,30 +140,161 @@
       <tbody id="rowsClosed"></tbody>
     </table>
     <div class="more" id="loadMore" style="display:none;">Show more</div>
-    <div class="data-note">Contract detail (strike/expiry) isn't available for these closed trades &mdash; IBKR's trade-history endpoint only returns the underlying ticker. Trades closed going forward can carry this through from the open-position snapshot.</div>
+    <div class="data-note">Contract detail (strike/expiry) isn't available for closed trades whose <span class="mono">contract_description</span> is empty &mdash; IBKR's trade-history endpoint only returns the underlying ticker. Trades closed going forward can carry this through from the open-position snapshot.</div>
   </div>
 </div>
 
+<!-- Supabase JS client (UMD global `supabase`). Loaded from CDN — fine for GitHub Pages. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const CLOSED_RAW = [];
-const OPEN_RAW = [];
-const ACCOUNT = {"net_liq": 4582.48, "avail": 1486.18, "currency": "CAD"};
+/* ============================================================================
+   Config. The publishable key is PUBLIC by design (like a Firebase web config):
+   it carries the `anon` Postgres role and every table is guarded by RLS.
+   Reads are open; the only write path is journal-column UPDATEs by a signed-in
+   user. The secret key must NEVER appear in this file.
+   ========================================================================== */
+const SUPABASE_URL = 'https://wcbokczlllatengdrdes.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_zD8-6MrQd1lymsUmgwKAZg_MkPpCHgx';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+/* ---------- state ---------- */
+let CLOSED_RAW = [];
+let OPEN_RAW = [];
+let session = null;
 let PAGE = 60, visibleClosed = PAGE, filterClosed = "", filterOpen = "";
 let sortOpen = {key:'unrealized_pnl', dir:1};
 let sortClosed = {key:'exit_time', dir:-1};
 
-function fmt(n){ return (n<0?"-$":"$") + Math.abs(n).toFixed(2); }
+/* ---------- helpers ---------- */
+function fmt(n){ n = Number(n)||0; return (n<0?"-$":"$") + Math.abs(n).toFixed(2); }
 function fmtDateShort(iso){ if(!iso) return '—'; const d=new Date(iso);
   return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
 function daysHeld(iso){ if(!iso) return null; const ms = Date.now()-new Date(iso).getTime(); return Math.floor(ms/86400000); }
+function showBanner(msg){ const b=document.getElementById('banner'); b.textContent=msg; b.classList.add('show'); }
+function hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+function latestSync(rows){
+  const ts = rows.map(r=>r.synced_at).filter(Boolean).sort();
+  return ts.length ? new Date(ts[ts.length-1]) : null;
+}
+
+/* ---------- row mapping: DB columns -> shape the render code expects ---------- */
+function mapOpen(r){
+  const sym = r.symbol || (r.contract_description||'').split(' ')[0];
+  return {
+    id: r.id,
+    sym,
+    desc: (r.contract_description||'').replace(sym + ' ', '') || '—',
+    entry_px: r.entry_price,
+    entry_time: r.entry_time,
+    cost_basis: Number(r.cost_basis)||0,
+    market_value: r.market_value,
+    unrealized_pnl: Number(r.unrealized_pnl)||0,
+    daily_pnl: Number(r.daily_pnl)||0,
+    dte: r.dte,
+    iv: r.iv,
+    vol: r.volume,
+    oi: r.open_interest,
+    unverified_entry_date: r.unverified_entry_date,
+    synced_at: r.synced_at,
+  };
+}
+function mapClosed(r){
+  return {
+    id: r.id,
+    sym: r.symbol,
+    entry_time: r.entry_time,
+    entry_px: r.entry_price,
+    exit_time: r.exit_time,
+    exit_px: r.exit_price,
+    size: r.size,
+    pnl: Number(r.pnl)||0,
+    comm: Number(r.commission)||0,
+    cost_basis: r.cost_basis,
+    return_pct: r.return_pct,
+    days_held: r.days_held,
+    ambiguous: !!r.ambiguous,
+    reason: r.ambiguous_reason,
+    contract_description: r.contract_description,
+    // journal fields live on the row itself now
+    strategy: r.strategy || '',
+    journal_thoughts: r.journal_thoughts || '',
+    planned_stop: r.planned_stop,
+    planned_target: r.planned_target,
+  };
+}
+
+/* ---------- data load ---------- */
+async function loadData(){
+  hideBanner();
+  const [openRes, closedRes] = await Promise.all([
+    db.from('open_positions').select('*'),
+    db.from('closed_trades').select('*'),
+  ]);
+  if(openRes.error)   throw new Error('open_positions: ' + openRes.error.message);
+  if(closedRes.error) throw new Error('closed_trades: ' + closedRes.error.message);
+  OPEN_RAW = (openRes.data || []).map(mapOpen);
+  CLOSED_RAW = (closedRes.data || []).map(mapClosed);
+  // seed journal cache from the rows
+  for(const t of CLOSED_RAW){
+    journalCache[t.id] = {
+      strategy: t.strategy,
+      thoughts: t.journal_thoughts,
+      stop: t.planned_stop == null ? '' : String(t.planned_stop),
+      target: t.planned_target == null ? '' : String(t.planned_target),
+    };
+  }
+}
 
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
   document.getElementById('panel-open').classList.toggle('active', name==='open');
   document.getElementById('panel-closed').classList.toggle('active', name==='closed');
 }
+window.switchTab = switchTab;
 
-/* ---------- OPEN TAB ---------- */
+/* ============================================================================
+   AUTH
+   ========================================================================== */
+function renderAuth(){
+  const el = document.getElementById('authbar');
+  if(session && session.user){
+    el.innerHTML = `<span class="who">Signed in as <b>${session.user.email}</b> — journal editing enabled</span>
+      <button id="btnLogout">Log out</button>`;
+    document.getElementById('btnLogout').onclick = async ()=>{ await db.auth.signOut(); };
+  } else {
+    el.innerHTML = `
+      <span class="who">Read-only. Log in to edit journal fields.</span>
+      <input type="email" id="authEmail" placeholder="email" autocomplete="username">
+      <input type="password" id="authPw" placeholder="password" autocomplete="current-password">
+      <button id="btnLogin">Log in</button>
+      <span id="authMsg"></span>`;
+    document.getElementById('btnLogin').onclick = doLogin;
+    document.getElementById('authPw').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  }
+}
+async function doLogin(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPw').value;
+  const msg = document.getElementById('authMsg');
+  msg.textContent = 'Checking...'; msg.className = '';
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  if(error){ msg.textContent = error.message; msg.className = 'err'; }
+  // onAuthStateChange handles the success path
+}
+function canEdit(){ return !!(session && session.user); }
+
+/* refresh any open journal editors when auth state flips */
+function refreshOpenEditors(){
+  document.querySelectorAll('.expand-row.open').forEach(row=>{
+    const id = row.id.replace('exp-','');
+    const t = CLOSED_RAW.find(x=>x.id===id);
+    renderBody(id, t && t.ambiguous ? ('Flagged: ' + t.reason + '. Verify against your broker before trusting this P&L split.') : null);
+  });
+}
+
+/* ============================================================================
+   OPEN TAB
+   ========================================================================== */
 const OPEN_COLS = [
   {key:'sym', label:'Ticker'},
   {key:'desc', label:'Contract', hide:true},
@@ -154,25 +310,21 @@ const OPEN_COLS = [
 function renderHeroOpen(){
   const totalUnreal = OPEN_RAW.reduce((a,o)=>a+o.unrealized_pnl,0);
   const totalCostBasis = OPEN_RAW.reduce((a,o)=>a+o.cost_basis,0);
+  const dated = OPEN_RAW.filter(o=>o.entry_time);
+  const avgDays = dated.length ? (dated.reduce((a,o)=>a+daysHeld(o.entry_time),0)/dated.length).toFixed(0) : '—';
   document.getElementById('heroOpen').innerHTML = `
-    <div class="stat"><div class="stat-label">Account Balance</div>
-      <div class="stat-val mono">${ACCOUNT.currency} ${ACCOUNT.net_liq.toFixed(2)}</div>
-      <div class="stat-sub">net liquidation</div></div>
-    <div class="stat"><div class="stat-label">Current P&amp;L</div>
+    <div class="stat"><div class="stat-label">Unrealized P&amp;L</div>
       <div class="stat-val mono ${totalUnreal>=0?'pos':'neg'}">USD ${totalUnreal>=0?'':'-'}$${Math.abs(totalUnreal).toFixed(2)}</div>
-      <div class="stat-sub">unrealized, live</div></div>
-    <div class="stat"><div class="stat-label"># Open Trades</div>
+      <div class="stat-sub">live, all open positions</div></div>
+    <div class="stat"><div class="stat-label"># Open Positions</div>
       <div class="stat-val mono">${OPEN_RAW.length}</div>
-      <div class="stat-sub">positions</div></div>
+      <div class="stat-sub">${dated.length}/${OPEN_RAW.length} with dated entry</div></div>
     <div class="stat"><div class="stat-label">Capital Deployed</div>
-      <div class="stat-val mono">USD ${fmt(totalCostBasis).replace('$','')}</div>
+      <div class="stat-val mono">USD ${totalCostBasis.toFixed(2)}</div>
       <div class="stat-sub">cost basis</div></div>
-    <div class="stat"><div class="stat-label">Capital Available</div>
-      <div class="stat-val mono">${ACCOUNT.currency} ${ACCOUNT.avail.toFixed(2)}</div>
-      <div class="stat-sub">buying power</div></div>
     <div class="stat"><div class="stat-label">Avg Days Held</div>
-      <div class="stat-val mono">${(()=>{const w=OPEN_RAW.filter(o=>o.entry_time); return w.length? (w.reduce((a,o)=>a+daysHeld(o.entry_time),0)/w.length).toFixed(0):'—';})()}d</div>
-      <div class="stat-sub">${OPEN_RAW.filter(o=>o.entry_time).length}/${OPEN_RAW.length} dated</div></div>`;
+      <div class="stat-val mono">${avgDays}${avgDays==='—'?'':'d'}</div>
+      <div class="stat-sub">open positions</div></div>`;
 }
 
 function renderTheadOpen(){
@@ -186,6 +338,7 @@ function sortOpenBy(key){
   if(sortOpen.key===key){ sortOpen.dir *= -1; } else { sortOpen = {key, dir: key==='sym'||key==='desc' ? 1 : -1}; }
   renderTheadOpen(); renderRowsOpen();
 }
+window.sortOpenBy = sortOpenBy;
 
 function renderRowsOpen(){
   let filtered = OPEN_RAW.filter(o => !filterOpen || o.sym.toLowerCase().includes(filterOpen.toLowerCase()));
@@ -195,20 +348,24 @@ function renderRowsOpen(){
     if(typeof av === 'string') return av.localeCompare(bv) * sortOpen.dir;
     return (av-bv) * sortOpen.dir;
   });
-  document.getElementById('rowsOpen').innerHTML = filtered.map(o => `<tr>
-      <td class="sym">${o.sym}</td>
+  const body = document.getElementById('rowsOpen');
+  if(!filtered.length){ body.innerHTML = `<tr><td class="empty" colspan="${OPEN_COLS.length}">No open positions.</td></tr>`; return; }
+  body.innerHTML = filtered.map(o => `<tr>
+      <td class="sym">${o.sym}${o.unverified_entry_date?' <span class="badge warn">entry?</span>':''}</td>
       <td class="desc col-hide">${o.desc}</td>
-      <td class="mono" style="color:var(--muted)">@${o.entry_px}</td>
+      <td class="mono" style="color:var(--muted)">${o.entry_px!=null?'@'+o.entry_px:'—'}</td>
       <td class="mono">${o.dte!=null ? o.dte+'d' : '—'}</td>
       <td class="mono" style="color:var(--muted)">${o.iv!=null ? (o.iv*100).toFixed(0)+'%' : '—'}</td>
       <td class="mono" style="color:var(--muted)">${o.vol!=null ? o.vol : '—'}</td>
-      <td class="mono" style="color:var(--muted)">${o.oi!=null ? o.oi.toLocaleString() : '—'}</td>
+      <td class="mono" style="color:var(--muted)">${o.oi!=null ? Number(o.oi).toLocaleString() : '—'}</td>
       <td class="mono ${o.daily_pnl>=0?'pos':'neg'} col-hide">${fmt(o.daily_pnl)}</td>
       <td class="mono ${o.unrealized_pnl>=0?'pos':'neg'}">${fmt(o.unrealized_pnl)}</td>
     </tr>`).join('');
 }
 
-/* ---------- CLOSED TAB ---------- */
+/* ============================================================================
+   CLOSED TAB
+   ========================================================================== */
 const CLOSED_COLS = [
   {key:'exit_time', label:'Date Closed'},
   {key:'entry_time', label:'Date Opened'},
@@ -271,26 +428,35 @@ function rrText(j, entryPx, exitPx){
   return `Planned R:R = 1:${plannedRR}${actualStr}`;
 }
 
-async function loadJournal(id){
-  try{ const r = await window.storage.get('journal2:'+id); return r ? JSON.parse(r.value) : {strategy:'',thoughts:'',stop:'',target:''}; }
-  catch(e){ return {strategy:'',thoughts:'',stop:'',target:''}; }
-}
-async function saveJournalWithRetry(id, obj, attempt){
-  attempt = attempt || 1;
-  try{
-    await window.storage.set('journal2:'+id, JSON.stringify(obj));
-    return true;
-  }catch(e){
-    if(attempt < 3){
-      await new Promise(r=>setTimeout(r, 400*attempt));
-      return saveJournalWithRetry(id, obj, attempt+1);
-    }
-    return false;
-  }
-}
-
 const journalCache = {};
 const openRowsState = {};
+
+function loadJournal(id){
+  return journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
+}
+async function saveJournal(id, obj){
+  if(!canEdit()) return {ok:false, msg:'Log in to save'};
+  const num = v => (v === '' || v == null) ? null : (isNaN(Number(v)) ? null : Number(v));
+  const patch = {
+    strategy: obj.strategy || null,
+    journal_thoughts: obj.thoughts || null,
+    planned_stop: num(obj.stop),
+    planned_target: num(obj.target),
+  };
+  let lastErr = 'save failed';
+  for(let attempt=1; attempt<=3; attempt++){
+    const { error } = await db.from('closed_trades').update(patch).eq('id', id);
+    if(!error){
+      const row = CLOSED_RAW.find(x=>x.id===id);
+      if(row){ row.strategy=patch.strategy||''; row.journal_thoughts=patch.journal_thoughts||'';
+        row.planned_stop=patch.planned_stop; row.planned_target=patch.planned_target; }
+      return {ok:true};
+    }
+    lastErr = error.message;
+    await new Promise(r=>setTimeout(r, 400*attempt));
+  }
+  return {ok:false, msg:lastErr};
+}
 
 function renderTheadClosed(){
   document.getElementById('theadClosed').innerHTML = CLOSED_COLS.map(c => {
@@ -304,16 +470,17 @@ function sortClosedBy(key){
   if(sortClosed.key===key){ sortClosed.dir *= -1; } else { sortClosed = {key, dir: key==='sym' ? 1 : -1}; }
   renderTheadClosed(); renderRowsClosed();
 }
+window.sortClosedBy = sortClosedBy;
 
 async function toggleRow(id){
   const rowEl = document.getElementById('exp-'+id);
   const isOpen = rowEl.classList.contains('open');
   if(isOpen){ rowEl.classList.remove('open'); openRowsState[id]=false; return; }
   rowEl.classList.add('open'); openRowsState[id]=true;
-  if(journalCache[id] === undefined){ journalCache[id] = await loadJournal(id); }
   const t = CLOSED_RAW.find(x=>x.id===id);
   renderBody(id, t && t.ambiguous ? ('Flagged: ' + t.reason + '. Verify against your broker before trusting this P&L split.') : null);
 }
+window.toggleRow = toggleRow;
 
 function renderBody(id, ambNote){
   const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
@@ -322,9 +489,13 @@ function renderBody(id, ambNote){
   const t = CLOSED_RAW.find(x=>x.id===id);
   const entryPx = t ? t.entry_px : null;
   const exitPx = t ? t.exit_px : null;
-  cell.innerHTML = (ambNote ? `<div class="flag-note">${ambNote}</div>` : '') + `
+  const dis = canEdit() ? '' : 'disabled';
+  const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;";
+  cell.innerHTML =
+    (ambNote ? `<div class="flag-note">${ambNote}</div>` : '') +
+    (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) + `
     <div class="field"><label>Strategy</label>
-      <select data-field="strategy" data-id="${id}">
+      <select data-field="strategy" data-id="${id}" ${dis}>
         <option value="">--</option>
         <option value="Base 1/2" ${j.strategy==='Base 1/2'?'selected':''}>Base 1/2</option>
         <option value="Later base" ${j.strategy==='Later base'?'selected':''}>Later base</option>
@@ -337,32 +508,32 @@ function renderBody(id, ambNote){
       </select></div>
     <div class="fieldgrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
       <div class="field"><label>Planned Stop ($)</label>
-        <input type="number" step="0.01" data-field="stop" data-id="${id}" value="${j.stop||''}"
-          style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;"></div>
+        <input type="number" step="0.01" data-field="stop" data-id="${id}" value="${j.stop||''}" ${dis} style="${inputStyle}"></div>
       <div class="field"><label>Planned Target ($)</label>
-        <input type="number" step="0.01" data-field="target" data-id="${id}" value="${j.target||''}"
-          style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;"></div>
+        <input type="number" step="0.01" data-field="target" data-id="${id}" value="${j.target||''}" ${dis} style="${inputStyle}"></div>
     </div>
     <div class="save-note" id="rr-${id}" style="margin-top:6px;">${rrText(j, entryPx, exitPx)}</div>
     <div class="field"><label>Journaling thoughts</label>
-      <textarea data-field="thoughts" data-id="${id}" placeholder="Why I took this, why I got out, what I'd do differently...">${j.thoughts||''}</textarea></div>
-    <div class="save-note" id="save-${id}">Autosaves as you type</div>`;
+      <textarea data-field="thoughts" data-id="${id}" placeholder="Why I took this, why I got out, what I'd do differently..." ${dis}>${j.thoughts||''}</textarea></div>
+    <div class="save-note" id="save-${id}">${canEdit() ? 'Autosaves as you type' : ''}</div>`;
+
+  if(!canEdit()) return;
   cell.querySelectorAll('textarea,select,input').forEach(el=>{
-    let t;
+    let timer;
     el.addEventListener('input', ()=>{
-      clearTimeout(t);
+      clearTimeout(timer);
       const note = document.getElementById('save-'+id);
-      t = setTimeout(async ()=>{
+      timer = setTimeout(async ()=>{
         const fid = el.getAttribute('data-id');
         journalCache[fid][el.getAttribute('data-field')] = el.value;
         if(note){ note.textContent = 'Saving...'; note.classList.remove('err'); note.style.color='var(--dim)'; }
-        const ok = await saveJournalWithRetry(fid, journalCache[fid]);
+        const res = await saveJournal(fid, journalCache[fid]);
         if(note){
-          if(ok){
+          if(res.ok){
             note.textContent = 'Saved'; note.classList.remove('err'); note.style.color='var(--green)';
             setTimeout(()=>{note.textContent='Autosaves as you type'; note.style.color='var(--dim)';},1200);
           } else {
-            note.textContent = 'Not saved — keep this tab open and try editing again'; note.classList.add('err');
+            note.textContent = res.msg || 'Not saved — try again'; note.classList.add('err');
           }
         }
         updateFlag(fid);
@@ -391,37 +562,42 @@ function updateStrategyCell(id){
 
 function fmtReturn(v){
   if(v==null) return '—';
+  v = Number(v);
   const cls = v>=0 ? 'pos' : 'neg';
   return `<span class="${cls}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
 }
 
-async function renderRowsClosed(){
+function renderRowsClosed(){
   let filtered = CLOSED_RAW.filter(t => !filterClosed || t.sym.toLowerCase().includes(filterClosed.toLowerCase()));
   filtered = filtered.slice().sort((a,b)=>{
     let av=a[sortClosed.key], bv=b[sortClosed.key];
+    if(sortClosed.key==='strategy'){ av=(journalCache[a.id]||{}).strategy||''; bv=(journalCache[b.id]||{}).strategy||''; }
     if(av==null) av = sortClosed.key.includes('time') ? '' : -Infinity;
     if(bv==null) bv = sortClosed.key.includes('time') ? '' : -Infinity;
     if(typeof av === 'string') return av.localeCompare(bv) * sortClosed.dir;
     return (av-bv) * sortClosed.dir;
   });
   const slice = filtered.slice(0, visibleClosed);
+  const body = document.getElementById('rowsClosed');
+  if(!filtered.length){ body.innerHTML = `<tr><td class="empty" colspan="${CLOSED_COLS.length}">No closed trades yet.</td></tr>`;
+    document.getElementById('loadMore').style.display='none'; return; }
   let html = '';
   for(const t of slice){
-    if(journalCache[t.id] === undefined){ journalCache[t.id] = await loadJournal(t.id); }
-    const j = journalCache[t.id];
+    const j = journalCache[t.id] || {strategy:'',thoughts:'',stop:'',target:''};
+    const contract = t.contract_description ? t.contract_description.replace(t.sym+' ','') : '—';
     html += `<tr class="main-row" id="main-${t.id}" onclick="toggleRow('${t.id}')">
       <td class="mono">${fmtDateShort(t.exit_time)}</td>
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
-      <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''}</td>
-      <td class="desc col-hide">—</td>
+      <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
+      <td class="desc col-hide">${contract}</td>
       <td class="mono">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
       <td class="mono">${fmtReturn(t.return_pct)}</td>
       <td id="strat-${t.id}">${j.strategy || '—'}</td>
     </tr>
-    <tr class="expand-row" id="exp-${t.id}"><td class="expand-cell" colspan="8" id="cell-${t.id}"></td></tr>`;
+    <tr class="expand-row" id="exp-${t.id}"><td class="expand-cell" colspan="${CLOSED_COLS.length}" id="cell-${t.id}"></td></tr>`;
   }
-  document.getElementById('rowsClosed').innerHTML = html;
+  body.innerHTML = html;
 
   document.getElementById('loadMore').style.display = filtered.length > visibleClosed ? 'block' : 'none';
   for(const t of slice){
@@ -433,16 +609,38 @@ async function renderRowsClosed(){
   }
 }
 
+/* ---------- wiring ---------- */
 document.getElementById('loadMore').addEventListener('click', ()=>{ visibleClosed += PAGE; renderRowsClosed(); });
 document.getElementById('searchClosed').addEventListener('input', (e)=>{ filterClosed = e.target.value; visibleClosed = PAGE; renderRowsClosed(); });
 document.getElementById('searchOpen').addEventListener('input', (e)=>{ filterOpen = e.target.value; renderRowsOpen(); });
 
-async function init(){
+db.auth.onAuthStateChange((_event, s)=>{
+  session = s;
+  renderAuth();
+  refreshOpenEditors();
+});
+
+function renderAll(){
   renderHeroOpen(); renderTheadOpen(); renderRowsOpen();
-  document.getElementById('syncedOpen').textContent = OPEN_RAW.length + ' positions · live as of sync';
-  renderHeroClosed(); renderTheadClosed();
-  document.getElementById('syncedClosed').textContent = CLOSED_RAW.length + ' round trips · synced ' + new Date().toLocaleDateString();
-  await renderRowsClosed();
+  renderHeroClosed(); renderTheadClosed(); renderRowsClosed();
+  const so = latestSync(OPEN_RAW), sc = latestSync(CLOSED_RAW);
+  document.getElementById('syncedOpen').textContent =
+    OPEN_RAW.length + ' positions' + (so ? ' · synced ' + so.toLocaleString() : '');
+  document.getElementById('syncedClosed').textContent =
+    CLOSED_RAW.length + ' round trips' + (sc ? ' · synced ' + sc.toLocaleDateString() : '');
+}
+
+async function init(){
+  const { data:{ session:s } } = await db.auth.getSession();
+  session = s;
+  renderAuth();
+  try{
+    await loadData();
+    renderAll();
+  }catch(e){
+    console.error(e);
+    showBanner('Could not load data from Supabase: ' + e.message);
+  }
 }
 init();
 </script>
