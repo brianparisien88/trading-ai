@@ -1,0 +1,32 @@
+name: Sync IBKR trades to Supabase
+
+# Deterministic ETL: pull IBKR Flex report -> FIFO-pair -> upsert to Supabase.
+# No LLM, no interactive auth. Runs daily (also keeps the free-tier Supabase
+# project warm so it doesn't auto-pause).
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 23:00 UTC daily (~a few hours after US market close)
+  workflow_dispatch:        # manual "Run workflow" button
+
+concurrency:
+  group: ibkr-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r sync/requirements.txt
+      - name: Run sync
+        working-directory: sync
+        env:
+          FLEX_TOKEN: ${{ secrets.FLEX_TOKEN }}
+          FLEX_QUERY_ID: ${{ vars.FLEX_QUERY_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python sync.py

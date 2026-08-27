@@ -216,8 +216,19 @@ def fifo_pair_trades(merged_orders):
             )
 
     round_trips.sort(key=lambda x: x["exit_time"] or x["entry_time"] or "", reverse=True)
-    for i, r in enumerate(round_trips):
-        r["id"] = f"{r['entry_order'] or 'na'}_{r['exit_order'] or 'na'}_{i}"
+    # Stable id: {entry_order}_{exit_order}_{n}. `n` is scoped to the
+    # (entry_order, exit_order) pair -- almost always 0 -- so the id does NOT
+    # shift when unrelated trades are added on a later sync. (Earlier versions
+    # used a global enumerate index here, which made ids churn every run and
+    # broke the dedup-on-insert contract in supabase_schema_draft.md.)
+    pair_seq = defaultdict(int)
+    for r in sorted(round_trips, key=lambda x: (
+        str(x["entry_order"]), str(x["exit_order"]),
+        x["entry_time"] or "", x["exit_time"] or "", x["size"],
+    )):
+        key = (r["entry_order"] or "na", r["exit_order"] or "na")
+        r["id"] = f"{key[0]}_{key[1]}_{pair_seq[key]}"
+        pair_seq[key] += 1
     for i, o in enumerate(unmatched_opens):
         o["id"] = f"open_{o['entry_order']}_{i}"
 
