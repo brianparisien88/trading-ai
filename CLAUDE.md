@@ -1,0 +1,82 @@
+# CLAUDE.md — Trade Journal
+
+IBKR options trades → reconstructed round-trip ledger → Supabase → static dashboard.
+Personal, single-user. Full decision log: `docs/living-state-global-memory` (changelog
+entries) + `docs/session_changelog_2026-08-26.md` + `docs/build_brief_*`.
+
+## Architecture (deterministic ETL — no LLM at runtime)
+
+1. **Sync** (`sync/`, GitHub Actions daily 23:00 UTC): pull IBKR Flex Web Service XML
+   → reshape → `trade_pipeline.py` (merge fills by order → FIFO-pair → enrich →
+   derive) → write Supabase with the secret key.
+2. **Database** (Supabase Postgres, project ref `wcbokczlllatengdrdes`, region us-west-2).
+3. **Dashboard** (`app/index.html`, GitHub Pages): reads Supabase live via supabase-js +
+   publishable key; Supabase Auth (email/password) gates journal editing.
+
+Claude's role is judgment work only (ambiguous-pair review, trend analysis), never the
+daily ETL. The IBKR MCP connector is **not** used by the sync.
+
+## Repo layout
+
+| Path | |
+|---|---|
+| `app/index.html` | The dashboard. Only this folder deploys to Pages (`.github/workflows/pages.yml`). |
+| `sync/sync.py` + `sync/trade_pipeline.py` | The ETL job + reconstruction logic. |
+| `supabase/migrations/` | Applied by hand in the Supabase SQL Editor (no CLI/MCP auth in this env). |
+| `docs/` | Briefs, strategy spec, changelog — reference only, **never** web-served. |
+
+## Supabase
+
+- **Keys use the new system**: `sb_publishable_...` (= `anon` role, RLS applies, safe in
+  the client HTML) and `sb_secret_...` (= service_role, bypasses RLS, server-only).
+  Do **not** use `anon`/`service_role` naming or pre-2026 client patterns.
+- Tables: `closed_trades` (PK `id` = `{entry_order}_{exit_order}_{n}`, stable),
+  `open_positions` (PK `open_{conid}`), `account_summary` (single row, id `current`).
+- RLS on all: public `SELECT`; no client writes except the 4 journal columns on
+  `closed_trades` for signed-in users (column GRANT + UPDATE policy).
+
+## IBKR Flex Web Service
+
+- Activity Flex Query **"TradeJournalSync", ID `1618686`**. Sections: Trades (Execution),
+  Open Positions (Summary), NAV in Base (exclude prior report date), Cash Report
+  (Base Currency Summary). Format XML, Period "Last 365 Calendar Days".
+- Endpoint `https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/`:
+  `SendRequest` → reference code → `GetStatement`. Token lasts ~1 year
+  (expires ~2027-01-26; sync fails with `code 1012` on expiry).
+
+## Secrets / env
+
+Local: `.env` (gitignored) — `SUPABASE_URL`, `SUPABASE_PROJECT_REF`,
+`SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`. Template: `.env.example`.
+
+GitHub Actions (repo Settings → Secrets and variables → Actions):
+- Secrets: `FLEX_TOKEN`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`
+- Variable: `FLEX_QUERY_ID` = `1618686`
+
+The publishable key is intentionally hardcoded in `app/index.html`. The secret key
+must never appear in `app/` or any committed file.
+
+## Hard rules
+
+- **Never overwrite the journal columns** (`strategy`, `journal_thoughts`,
+  `planned_stop`, `planned_target`) — the sync payload deliberately omits them.
+- **Historical 242-trade backfill is DEFERRED.** Don't attempt it, and never source
+  fills from chat transcripts — only a real IBKR export or the sync's own window.
+- `closed_trades.contract_description` stays null until capture-on-close is built;
+  don't backfill with guesses.
+- Ambiguous FIFO pairings (`ambiguous = true`) are shown, never silently trusted.
+- Account-level figures (`account_summary`) are CAD (base currency); position-level
+  figures are USD. Always label currency; never combine them unlabeled.
+
+## Common commands
+
+```bash
+# run the sync locally (needs the env vars)
+cd sync && pip install -r requirements.txt && python sync.py
+
+# trigger the scheduled sync now
+gh workflow run sync.yml
+
+# preview the dashboard
+python3 -m http.server 8000 --directory app
+```
