@@ -56,6 +56,15 @@ GitHub Actions (repo Settings → Secrets and variables → Actions):
 The publishable key is intentionally hardcoded in `app/index.html`. The secret key
 must never appear in `app/` or any committed file.
 
+## Known behaviour — Flex data lag
+
+IBKR's Flex Web Service reports **open positions and NAV as of the prior business
+day's close**, not live. A position closed today still appears in `open_positions`
+(and `account_summary` is a day stale) until the next day's sync, which self-heals
+it — the closed trade lands in `closed_trades` and the position drops off. This is
+inherent to Flex (the headless/tokenised tradeoff); the live Client Portal API was
+deliberately not used. The dashboard labels the "as of" date on the Open tab.
+
 ## Hard rules
 
 - **Never overwrite the journal columns** (`strategy`, `journal_thoughts`,

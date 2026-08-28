@@ -125,7 +125,7 @@
       <thead><tr id="theadOpen"></tr></thead>
       <tbody id="rowsOpen"></tbody>
     </table>
-    <div class="data-note">Entry price is IBKR's actual average cost basis (includes commission), not a reconstructed estimate. IV/Vol/OI are the last synced option-level snapshot.</div>
+    <div class="data-note">Positions and balances come from IBKR's Flex report, which is <strong>end-of-day, ~1 business day behind live</strong> — a position closed today still shows here until the next day's sync. Entry price is IBKR's actual average cost basis (includes commission).</div>
   </div>
 
   <!-- CLOSED TAB -->
@@ -635,8 +635,14 @@ function renderAll(){
   renderHeroOpen(); renderTheadOpen(); renderRowsOpen();
   renderHeroClosed(); renderTheadClosed(); renderRowsClosed();
   const so = latestSync(OPEN_RAW), sc = latestSync(CLOSED_RAW);
+  // IBKR's Flex feed reports positions/NAV as of the prior business day's close,
+  // not live — show that date, not just the sync run time.
+  const asOf = ACCOUNT && ACCOUNT.as_of
+    ? new Date(ACCOUNT.as_of + 'T00:00:00').toLocaleDateString()
+    : null;
   document.getElementById('syncedOpen').textContent =
-    OPEN_RAW.length + ' positions' + (so ? ' · synced ' + so.toLocaleString() : '');
+    OPEN_RAW.length + ' positions' + (asOf ? ` · IBKR data as of ${asOf} (end of day)` : '')
+    + (so ? ' · synced ' + so.toLocaleDateString() : '');
   document.getElementById('syncedClosed').textContent =
     CLOSED_RAW.length + ' round trips' + (sc ? ' · synced ' + sc.toLocaleDateString() : '');
 }
