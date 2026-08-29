@@ -43,6 +43,7 @@
   .hero.hero4{grid-template-columns:repeat(4,1fr);}
   .stat{background:var(--surface); padding:14px 12px;}
   .stat-label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
+  .stat-th{text-transform:none; letter-spacing:0; opacity:.75; font-weight:400;}
   .stat-val{font-size:17px; font-weight:600;}
   .stat-sub{font-size:10.5px; color:var(--muted); margin-top:3px;}
   .pos{color:var(--green);} .neg{color:var(--red);}
@@ -133,6 +134,7 @@
   <!-- CLOSED TAB -->
   <div class="panel" id="panel-closed">
     <div class="hero hero5" id="heroClosed"></div>
+    <div class="hero hero5" id="heroClosedDist" style="margin-top:-10px;"></div>
     <div class="toolbar">
       <input class="search" id="searchClosed" placeholder="Filter symbol...">
       <div class="synced" id="syncedClosed"></div>
@@ -192,6 +194,8 @@ function strategyOptionsHTML(current){
 function fmt(n){ n = Number(n)||0; return (n<0?"-$":"$") + Math.abs(n).toFixed(2); }
 function fmtDateShort(iso){ if(!iso) return '—'; const d=new Date(iso);
   return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
+function fmtExpiry(d){ if(!d) return '—'; const x=new Date(d+'T00:00:00');
+  return x.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + " '" + String(x.getFullYear()).slice(2); }
 function daysHeld(iso){ if(!iso) return null; const ms = Date.now()-new Date(iso).getTime(); return Math.floor(ms/86400000); }
 // % the underlying moved *in the trade's direction* between the exit and the
 // contract's own expiry (or today, if it hasn't expired). call = bullish (up is
@@ -461,6 +465,7 @@ const CLOSED_COLS = [
   {key:'pnl', label:'P&L'},
   {key:'return_pct', label:'Return %', hide:true},
   {key:'since_exit', label:'If Held'},
+  {key:'contract_expiry', label:'Expiry'},
   {key:'verdict', label:'Verdict'},
   {key:'strategy', label:'Strategy'},
 ];
@@ -498,6 +503,41 @@ function renderHeroClosed(){
     <div class="stat"><div class="stat-label">Profit Factor</div>
       <div class="stat-val mono ${s.profitFactor>=1?'pos':'neg'}">${isFinite(s.profitFactor)?s.profitFactor.toFixed(2):'∞'}</div>
       <div class="stat-sub">gross win / gross loss</div></div>`;
+  renderHeroClosedDist();
+}
+
+// P&L-size bands. Tweak the thresholds here.
+const PNL_BIG = 200, PNL_MID = 80, PNL_SCRATCH = 5;
+function pnlBand(p){
+  const a = Math.abs(p);
+  if(a < PNL_SCRATCH) return 'scratch';
+  const dir = p > 0 ? 'win' : 'loss';
+  if(a >= PNL_BIG) return 'big'+dir;
+  if(a >= PNL_MID) return 'mid'+dir;
+  return 'small'+dir;
+}
+function renderHeroClosedDist(){
+  const b = {};
+  for(const t of CLOSED_RAW){
+    const k = pnlBand(t.pnl);
+    if(!b[k]) b[k] = {n:0, sum:0};
+    b[k].n++; b[k].sum += t.pnl;
+  }
+  const g = k => b[k] || {n:0, sum:0};
+  const midN = g('midwin').n + g('midloss').n;
+  const midSum = g('midwin').sum + g('midloss').sum;
+  const tile = (label, cls, d, sub) => `
+    <div class="stat"><div class="stat-label">${label}</div>
+      <div class="stat-val mono ${cls}">${d.n}</div>
+      <div class="stat-sub">${sub || fmt(d.sum)}</div></div>`;
+  document.getElementById('heroClosedDist').innerHTML =
+    tile(`Big Winners <span class="stat-th">&ge; $${PNL_BIG}</span>`, 'pos', g('bigwin')) +
+    tile(`Big Losers <span class="stat-th">&ge; $${PNL_BIG}</span>`, 'neg', g('bigloss')) +
+    tile(`Small Winners <span class="stat-th">$${PNL_SCRATCH}&ndash;$${PNL_MID}</span>`, 'pos', g('smallwin')) +
+    tile(`Small Losers <span class="stat-th">$${PNL_SCRATCH}&ndash;$${PNL_MID}</span>`, 'neg', g('smallloss')) +
+    tile(`Mid-range <span class="stat-th">$${PNL_MID}&ndash;$${PNL_BIG}</span>`, '',
+         {n: midN, sum: midSum},
+         `${g('midwin').n} W / ${g('midloss').n} L &middot; ${fmt(midSum)}`);
 }
 
 function rrText(j, entryPx, exitPx){
@@ -699,6 +739,7 @@ function renderRowsClosed(){
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
       <td class="mono col-hide">${fmtReturn(t.return_pct)}</td>
       <td class="mono">${fmtSinceExit(t.since_exit)}</td>
+      <td class="mono" style="color:var(--${t.contract_open?'blue':'dim'})" title="${t.contract_open?'contract still open — verdict is provisional':'expired'}">${fmtExpiry(t.contract_expiry)}</td>
       <td>${fmtVerdict(t.since_exit)}</td>
       <td id="strat-${t.id}">${j.strategy || '—'}</td>
     </tr>
