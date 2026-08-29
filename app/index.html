@@ -44,6 +44,9 @@
   .stat{background:var(--surface); padding:14px 12px;}
   .stat-label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
   .stat-th{text-transform:none; letter-spacing:0; opacity:.75; font-weight:400;}
+  label.chk{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); cursor:pointer; user-select:none; white-space:nowrap;}
+  label.chk input{accent-color:var(--amber); cursor:pointer;}
+  .badge.rec{background:rgba(212,167,44,.15); color:var(--amber);}
   .stat-val{font-size:17px; font-weight:600;}
   .stat-sub{font-size:10.5px; color:var(--muted); margin-top:3px;}
   .pos{color:var(--green);} .neg{color:var(--red);}
@@ -136,7 +139,10 @@
     <div class="hero hero5" id="heroClosed"></div>
     <div class="hero hero5" id="heroClosedDist" style="margin-top:-10px;"></div>
     <div class="toolbar">
-      <input class="search" id="searchClosed" placeholder="Filter symbol...">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input class="search" id="searchClosed" placeholder="Filter symbol...">
+        <label class="chk"><input type="checkbox" id="filterRecovered"> <span id="recLabel">Recovered cuts</span></label>
+      </div>
       <div class="synced" id="syncedClosed"></div>
     </div>
     <table class="ledger" id="tableClosed">
@@ -144,7 +150,7 @@
       <tbody id="rowsClosed"></tbody>
     </table>
     <div class="more" id="loadMore" style="display:none;">Show more</div>
-    <div class="data-note"><strong>If Held</strong> = how far the underlying moved <em>in the trade's direction</em> between your exit and <em>that contract's own expiry</em> (or today, if it hasn't expired) — calls: up is favourable; puts: down. Not measured to "today" regardless of how long ago the contract died. <strong>Verdict</strong>: <span class="pos">Should've held</span> ≥ +5%, <span class="neg">Right to exit</span> ≤ −5%, About even between. Expand a row for the peak favourable point within that window. Daily closes from Yahoo Finance — directional proxy, not an options P&amp;L simulation. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot.</div>
+    <div class="data-note"><strong>If Held</strong> = how far the underlying moved <em>in the trade's direction</em> between your exit and <em>that contract's own expiry</em> (or today, if it hasn't expired) — calls: up is favourable; puts: down. Not measured to "today" regardless of how long ago the contract died. <strong>Verdict</strong>: <span class="pos">Should've held</span> ≥ +5%, <span class="neg">Right to exit</span> ≤ −5%, About even between. Expand a row for the peak favourable point within that window. <span class="badge rec">rec</span> = closed at a loss, then the underlying ran ≥ +15% in your favour before the contract expired (a probably-too-tight stop) — tick <em>Recovered cuts</em> to isolate them. Daily closes from Yahoo Finance — directional proxy, not an options P&amp;L simulation. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot.</div>
   </div>
 </div>
 
@@ -166,7 +172,10 @@ let CLOSED_RAW = [];
 let OPEN_RAW = [];
 let ACCOUNT = null;   // { net_liquidation, available_funds, currency, as_of } — null until synced
 let session = null;
-let PAGE = 60, visibleClosed = PAGE, filterClosed = "", filterOpen = "";
+let PAGE = 60, visibleClosed = PAGE, filterClosed = "", filterOpen = "", onlyRecovered = false;
+// A "recovered cut": exited at a loss, then the underlying ran >= this % in the
+// trade's favour before the contract expired. i.e. the stop was probably too tight.
+const RECOVERED_PEAK = 15;
 let sortOpen = {key:'unrealized_pnl', dir:1};
 let sortClosed = {key:'exit_time', dir:-1};
 
@@ -292,6 +301,7 @@ function mapClosed(r){
     since_exit: sinceExitPct(r),                 // exit -> contract expiry (or today if still open)
     peak_move: peakPct(r),                       // best favourable move within that window
     verdict: sinceExitPct(r),                    // same number; rendered as a word (sorts numerically)
+    recovered: (Number(r.pnl) < 0) && (peakPct(r) != null) && (peakPct(r) >= RECOVERED_PEAK),
     // journal fields live on the row itself now
     strategy: r.strategy || '',
     journal_thoughts: r.journal_thoughts || '',
@@ -526,6 +536,7 @@ function renderHeroClosedDist(){
   const g = k => b[k] || {n:0, sum:0};
   const midN = g('midwin').n + g('midloss').n;
   const midSum = g('midwin').sum + g('midloss').sum;
+  const smallLoserRec = CLOSED_RAW.filter(t => pnlBand(t.pnl)==='smallloss' && t.recovered).length;
   const tile = (label, cls, d, sub) => `
     <div class="stat"><div class="stat-label">${label}</div>
       <div class="stat-val mono ${cls}">${d.n}</div>
@@ -534,7 +545,8 @@ function renderHeroClosedDist(){
     tile(`Big Winners <span class="stat-th">&ge; $${PNL_BIG}</span>`, 'pos', g('bigwin')) +
     tile(`Big Losers <span class="stat-th">&ge; $${PNL_BIG}</span>`, 'neg', g('bigloss')) +
     tile(`Small Winners <span class="stat-th">$${PNL_SCRATCH}&ndash;$${PNL_MID}</span>`, 'pos', g('smallwin')) +
-    tile(`Small Losers <span class="stat-th">$${PNL_SCRATCH}&ndash;$${PNL_MID}</span>`, 'neg', g('smallloss')) +
+    tile(`Small Losers <span class="stat-th">$${PNL_SCRATCH}&ndash;$${PNL_MID}</span>`, 'neg', g('smallloss'),
+         `${fmt(g('smallloss').sum)} &middot; <span style="color:var(--amber)">${smallLoserRec} rec</span>`) +
     tile(`Mid-range <span class="stat-th">$${PNL_MID}&ndash;$${PNL_BIG}</span>`, '',
          {n: midN, sum: midSum},
          `${g('midwin').n} W / ${g('midloss').n} L &middot; ${fmt(midSum)}`);
@@ -714,7 +726,9 @@ function fmtReturn(v){
 }
 
 function renderRowsClosed(){
-  let filtered = CLOSED_RAW.filter(t => !filterClosed || t.sym.toLowerCase().includes(filterClosed.toLowerCase()));
+  let filtered = CLOSED_RAW.filter(t =>
+    (!filterClosed || t.sym.toLowerCase().includes(filterClosed.toLowerCase())) &&
+    (!onlyRecovered || t.recovered));
   filtered = filtered.slice().sort((a,b)=>{
     let av=a[sortClosed.key], bv=b[sortClosed.key];
     if(sortClosed.key==='strategy'){ av=(journalCache[a.id]||{}).strategy||''; bv=(journalCache[b.id]||{}).strategy||''; }
@@ -725,7 +739,7 @@ function renderRowsClosed(){
   });
   const slice = filtered.slice(0, visibleClosed);
   const body = document.getElementById('rowsClosed');
-  if(!filtered.length){ body.innerHTML = `<tr><td class="empty" colspan="${CLOSED_COLS.length}">No closed trades yet.</td></tr>`;
+  if(!filtered.length){ body.innerHTML = `<tr><td class="empty" colspan="${CLOSED_COLS.length}">${onlyRecovered?'No recovered cuts match.':'No closed trades yet.'}</td></tr>`;
     document.getElementById('loadMore').style.display='none'; return; }
   let html = '';
   for(const t of slice){
@@ -733,7 +747,7 @@ function renderRowsClosed(){
     html += `<tr class="main-row" id="main-${t.id}" onclick="toggleRow('${t.id}')">
       <td class="mono">${fmtDateShort(t.exit_time)}</td>
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
-      <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
+      <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''}${t.recovered?` <span class="badge rec" title="closed at a loss, then ran +${Math.round(t.peak_move)}% before expiry">rec</span>`:''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
       <td class="mono col-hide">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
       <td class="mono col-hide" style="color:var(--muted)">${t.contract_cost!=null ? fmt(t.contract_cost) : '—'}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
@@ -760,6 +774,7 @@ function renderRowsClosed(){
 /* ---------- wiring ---------- */
 document.getElementById('loadMore').addEventListener('click', ()=>{ visibleClosed += PAGE; renderRowsClosed(); });
 document.getElementById('searchClosed').addEventListener('input', (e)=>{ filterClosed = e.target.value; visibleClosed = PAGE; renderRowsClosed(); });
+document.getElementById('filterRecovered').addEventListener('change', (e)=>{ onlyRecovered = e.target.checked; visibleClosed = PAGE; renderRowsClosed(); });
 document.getElementById('searchOpen').addEventListener('input', (e)=>{ filterOpen = e.target.value; renderRowsOpen(); });
 
 db.auth.onAuthStateChange((_event, s)=>{
@@ -771,6 +786,8 @@ db.auth.onAuthStateChange((_event, s)=>{
 function renderAll(){
   renderHeroOpen(); renderTheadOpen(); renderRowsOpen();
   renderHeroClosed(); renderTheadClosed(); renderRowsClosed();
+  const recN = CLOSED_RAW.filter(t=>t.recovered).length;
+  document.getElementById('recLabel').textContent = `Recovered cuts (${recN})`;
   const so = latestSync(OPEN_RAW), sc = latestSync(CLOSED_RAW);
   // IBKR's Flex feed reports positions/NAV as of the prior business day's close,
   // not live — show that date, not just the sync run time.
