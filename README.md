@@ -23,7 +23,6 @@ stored in Supabase, shown on a static dashboard.
 - [x] GitHub Pages live — https://brianparisien88.github.io/trading-ai/ (Actions deploy from `app/`)
 - [x] Deterministic IBKR sync (`sync/`) + daily GitHub Actions cron — **needs repo secrets set** (`sync/README.md`)
 - [ ] (Deferred) Historical 242-trade migration
-- [ ] (Follow-up) Capture `contract_description` on closed trades
 
 ## Architecture
 

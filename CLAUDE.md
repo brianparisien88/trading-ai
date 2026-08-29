@@ -7,8 +7,9 @@ entries) + `docs/session_changelog_2026-08-26.md` + `docs/build_brief_*`.
 ## Architecture (deterministic ETL — no LLM at runtime)
 
 1. **Sync** (`sync/`, GitHub Actions daily 12:00 UTC ≈ 08:00 ET): pull IBKR Flex Web
-   Service XML → reshape → `trade_pipeline.py` (merge fills by order → FIFO-pair →
-   enrich → derive) → write Supabase with the secret key.
+   Service XML → `trade_pipeline.py` (merge fills by order → FIFO-pair → derive) →
+   enrich (contract detail from Flex; underlying stock prices from Yahoo Finance's
+   keyless chart API, one call/ticker) → write Supabase with the secret key.
 2. **Database** (Supabase Postgres, project ref `wcbokczlllatengdrdes`, region us-west-2).
 3. **Dashboard** (`app/index.html`, GitHub Pages): reads Supabase live via supabase-js +
    publishable key; Supabase Auth (email/password) gates journal editing.
@@ -73,8 +74,9 @@ API was deliberately not used. The dashboard labels the "as of" date on the Open
   `planned_stop`, `planned_target`) — the sync payload deliberately omits them.
 - **Historical 242-trade backfill is DEFERRED.** Don't attempt it, and never source
   fills from chat transcripts — only a real IBKR export or the sync's own window.
-- `closed_trades.contract_description` stays null until capture-on-close is built;
-  don't backfill with guesses.
+- `closed_trades` contract detail (`contract_description` / `contract_expiry` /
+  `contract_type` / `contract_strike`) and underlying prices are **sync-owned** —
+  read from Flex + Yahoo, not user-editable, safe to recompute every run.
 - Ambiguous FIFO pairings (`ambiguous = true`) are shown, never silently trusted.
 - Account-level figures (`account_summary`) are CAD (base currency); position-level
   figures are USD. Always label currency; never combine them unlabeled.

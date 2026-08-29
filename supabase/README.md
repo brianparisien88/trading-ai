@@ -9,8 +9,10 @@ Schema for the trade journal. Two tables, per [`docs/supabase_schema_draft.md`](
 
 | File | What it does |
 |---|---|
-| `migrations/20260827120000_init_trade_journal.sql` | Creates both tables, indexes, enables RLS, adds public **read** policies. No historical data. Applied 2026-08-27. |
-| `migrations/20260827130000_journal_edit_policy.sql` | Locks down blanket write grants; lets a signed-in user (Supabase Auth) update only the 4 journal columns on `closed_trades`. |
+| `migrations/20260827120000_init_trade_journal.sql` | Creates both tables, indexes, enables RLS, adds public **read** policies. Applied 2026-08-27. |
+| `migrations/20260827130000_journal_edit_policy.sql` | Locks down blanket write grants; lets a signed-in user (Supabase Auth) update only the 4 journal columns on `closed_trades`. Applied 2026-08-27. |
+| `migrations/20260828000000_account_summary.sql` | Single-row `account_summary` table (base-currency balances) + public read. Applied 2026-08-27. |
+| `migrations/20260829120000_closed_trades_context.sql` | Adds contract detail + underlying-price + `trade_seq` columns to `closed_trades`. |
 
 ## Applying the initial migration
 

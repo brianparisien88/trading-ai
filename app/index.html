@@ -77,6 +77,8 @@
   .expand-cell{padding:10px 16px 16px !important; background:var(--surface2);}
   .flag-note{font-size:11.5px; color:var(--amber); margin-bottom:8px; padding:6px 8px; background:rgba(212,167,44,.08); border-radius:6px;}
   .lock-note{font-size:11px; color:var(--dim); margin-bottom:8px; padding:6px 8px; background:var(--surface); border-radius:6px;}
+  .context{font-size:12px; color:var(--text); margin-bottom:12px; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:6px; line-height:1.7;}
+  .context div span:first-child{display:inline-block; min-width:96px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim);}
   .field{margin-top:8px;}
   .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim); margin-bottom:5px;}
   .field textarea, .field select{width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text);
@@ -140,7 +142,7 @@
       <tbody id="rowsClosed"></tbody>
     </table>
     <div class="more" id="loadMore" style="display:none;">Show more</div>
-    <div class="data-note">Rows flagged <span class="badge warn">check</span> were paired against more than one open lot &mdash; verify the P&amp;L split against your broker.</div>
+    <div class="data-note"><strong>Since Exit</strong> = how far the underlying stock has moved <em>in the trade's direction</em> since you closed (calls: up is favourable; puts: down). Green = holding would have helped, red = exiting was right. Stock prices are daily closes from Yahoo Finance; directional proxy only, not an options P&amp;L simulation. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot &mdash; verify against your broker.</div>
   </div>
 </div>
 
@@ -191,6 +193,20 @@ function fmt(n){ n = Number(n)||0; return (n<0?"-$":"$") + Math.abs(n).toFixed(2
 function fmtDateShort(iso){ if(!iso) return '—'; const d=new Date(iso);
   return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
 function daysHeld(iso){ if(!iso) return null; const ms = Date.now()-new Date(iso).getTime(); return Math.floor(ms/86400000); }
+// % the underlying has moved *in the trade's direction* since the exit date.
+// call = bullish (up is favourable), put = bearish (down is favourable).
+// positive => holding would have helped; negative => exiting was right.
+function sinceExitPct(r){
+  const ex = Number(r.underlying_price_exit), la = Number(r.underlying_price_latest);
+  if(!r.underlying_price_exit || !r.underlying_price_latest || ex === 0) return null;
+  const dir = (r.contract_type === 'P') ? -1 : 1;
+  return dir * (la - ex) / ex * 100;
+}
+function fmtSinceExit(v){
+  if(v == null) return '<span style="color:var(--dim)">—</span>';
+  const cls = v >= 0 ? 'pos' : 'neg';      // pos/green = holding would have helped
+  return `<span class="${cls}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+}
 function showBanner(msg){ const b=document.getElementById('banner'); b.textContent=msg; b.classList.add('show'); }
 function hideBanner(){ document.getElementById('banner').classList.remove('show'); }
 function latestSync(rows){
@@ -236,6 +252,16 @@ function mapClosed(r){
     ambiguous: !!r.ambiguous,
     reason: r.ambiguous_reason,
     contract_description: r.contract_description,
+    contract_expiry: r.contract_expiry,
+    contract_type: r.contract_type,
+    contract_strike: r.contract_strike,
+    contract_cost: r.cost_basis,                 // premium paid at entry
+    u_entry: r.underlying_price_entry,
+    u_exit: r.underlying_price_exit,
+    u_latest: r.underlying_price_latest,
+    u_latest_at: r.underlying_price_latest_at,
+    trade_seq: r.trade_seq,
+    since_exit: sinceExitPct(r),                 // % the stock moved in the trade's favour since exit
     // journal fields live on the row itself now
     strategy: r.strategy || '',
     journal_thoughts: r.journal_thoughts || '',
@@ -404,9 +430,11 @@ const CLOSED_COLS = [
   {key:'exit_time', label:'Date Closed'},
   {key:'entry_time', label:'Date Opened'},
   {key:'sym', label:'Ticker'},
-  {key:'days_held', label:'Days Held'},
+  {key:'days_held', label:'Days Held', hide:true},
+  {key:'contract_cost', label:'Cost'},
   {key:'pnl', label:'P&L'},
   {key:'return_pct', label:'Return %'},
+  {key:'since_exit', label:'Since Exit'},
   {key:'strategy', label:'Strategy'},
 ];
 
@@ -515,6 +543,24 @@ async function toggleRow(id){
 }
 window.toggleRow = toggleRow;
 
+function contextBlock(t){
+  if(!t) return '';
+  const money = v => v==null ? '—' : '$'+Number(v).toFixed(2);
+  const px = v => v==null ? '—' : '$'+Number(v).toFixed(2);
+  const contract = [t.sym, t.contract_description].filter(Boolean).join(' ') || t.sym || '—';
+  const latestWhen = t.u_latest_at ? new Date(t.u_latest_at).toLocaleDateString() : 'latest';
+  const se = t.since_exit;
+  const seLine = se==null ? ''
+    : `<div><span>Since exit</span> ${fmtSinceExit(se)} &nbsp;<span style="color:var(--dim)">${se>=0?'holding would have helped':'exiting was right'}</span></div>`;
+  return `<div class="context">
+    <div><span>Contract</span> ${contract}</div>
+    <div><span>Contract cost</span> ${money(t.contract_cost)} <span style="color:var(--dim)">premium at entry</span></div>
+    <div><span>Stock ${t.sym}</span> ${px(t.u_entry)} <span style="color:var(--dim)">entry</span> &rarr; ${px(t.u_exit)} <span style="color:var(--dim)">exit</span> &rarr; ${px(t.u_latest)} <span style="color:var(--dim)">${latestWhen}</span></div>
+    ${seLine}
+    <div><span>Trade #</span> ${t.trade_seq ?? '—'} of ${CLOSED_RAW.length}</div>
+  </div>`;
+}
+
 function renderBody(id, ambNote){
   const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
   const cell = document.getElementById('cell-'+id);
@@ -526,6 +572,7 @@ function renderBody(id, ambNote){
   const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;";
   cell.innerHTML =
     (ambNote ? `<div class="flag-note">${ambNote}</div>` : '') +
+    contextBlock(t) +
     (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) + `
     <div class="field"><label>Strategy</label>
       <select data-field="strategy" data-id="${id}" ${dis}>${strategyOptionsHTML(j.strategy)}</select></div>
@@ -611,9 +658,11 @@ function renderRowsClosed(){
       <td class="mono">${fmtDateShort(t.exit_time)}</td>
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
       <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
-      <td class="mono">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
+      <td class="mono col-hide">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
+      <td class="mono" style="color:var(--muted)">${t.contract_cost!=null ? fmt(t.contract_cost) : '—'}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
       <td class="mono">${fmtReturn(t.return_pct)}</td>
+      <td class="mono">${fmtSinceExit(t.since_exit)}</td>
       <td id="strat-${t.id}">${j.strategy || '—'}</td>
     </tr>
     <tr class="expand-row" id="exp-${t.id}"><td class="expand-cell" colspan="${CLOSED_COLS.length}" id="cell-${t.id}"></td></tr>`;

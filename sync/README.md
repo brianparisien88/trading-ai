@@ -3,18 +3,18 @@
 Deterministic daily ETL. No LLM at runtime, no interactive login.
 
 ```
-IBKR Flex Web Service (XML)
-        │  fetch (token + query id)
-        ▼
-flex_to_raw_trades / flex_to_raw_positions      sync.py
-        │  reshape to the dicts trade_pipeline expects
-        ▼
-run_pipeline()  ── merge fills → FIFO-pair → enrich → derive   trade_pipeline.py
-        │
+IBKR Flex Web Service (XML)          Yahoo Finance chart API
+        │  fetch (token + query id)          │  1 call / ticker (keyless)
+        ▼                                     │
+flex_to_raw_* → run_pipeline()                │
+   merge fills → FIFO-pair → derive           │
+        │                                     ▼
+        └──► enrich: contract detail, trade_seq, underlying prices
         ▼
 Supabase (secret key, bypasses RLS)
-  • closed_trades   upsert on id   (journal columns never touched)
-  • open_positions  upsert current + delete stale
+  • closed_trades    upsert on id   (journal columns never touched)
+  • open_positions   upsert current + delete stale
+  • account_summary  single row
 ```
 
 ## Files
@@ -70,8 +70,8 @@ Repo **Settings → Secrets and variables → Actions**:
 ## Behaviour notes
 
 - **Journal columns are safe.** The `closed_trades` upsert payload only includes
-  sync-owned columns, so `strategy` / `journal_thoughts` / `planned_stop` /
-  `planned_target` / `contract_description` are never overwritten.
+  sync-owned columns (see `CLOSED_SYNC_COLUMNS`), so `strategy` /
+  `journal_thoughts` / `planned_stop` / `planned_target` are never overwritten.
 - **Stable ids.** `closed_trades.id` is `{entry_order}_{exit_order}_{n}` and does
   not shift when new trades appear, so daily re-runs are idempotent.
 - **Empty-guard.** If Flex returns zero trades *and* zero positions the job
@@ -83,8 +83,18 @@ Repo **Settings → Secrets and variables → Actions**:
   pipeline + dedup handle overlap. Full historical backfill is a separate,
   still-deferred task.
 
-## Not done yet
+### Enrichment (added 2026-08-29)
 
-- `contract_description` on `closed_trades` stays null. Flex carries strike/expiry
-  on executions, so capture-on-close is now easy to add — tracked as a follow-up,
-  not wired in here.
+- **Contract detail** (`contract_expiry` / `contract_type` / `contract_strike` /
+  `contract_description`) is read straight off the Flex execution records, keyed
+  by order id. Real data, not a guess — so it also backfills historical trades.
+- **`trade_seq`** = the Nth closed round-trip, chronological by exit.
+- **Underlying stock prices** (`underlying_price_entry` / `_exit` / `_latest` +
+  `_latest_at`) come from Yahoo Finance's chart API — one keyless call per unique
+  ticker, gives full daily-close history + the current price. Best-effort: a
+  ticker Yahoo can't resolve just leaves those fields null; the sync never fails
+  over price data. Entry/exit use the close on or before that date (walks back
+  over weekends/holidays); latest is refreshed every run.
+- The dashboard derives **"Since Exit"** from `_exit` vs `_latest` and
+  `contract_type` — a *directional* proxy ("was I right about direction after I
+  got out?"), not an options-P&L simulation.

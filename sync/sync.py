@@ -2,14 +2,16 @@
 Deterministic IBKR -> Supabase sync.
 
 Flow (no LLM, no interactive auth):
-  1. Pull an Activity Flex Query (Trades + Open Positions) from IBKR's
-     Flex Web Service using a token.
+  1. Pull an Activity Flex Query from IBKR's Flex Web Service using a token.
   2. Parse the XML into the raw_trades / raw_positions dict shapes that
      trade_pipeline.py expects.
   3. run_pipeline() -> (closed_trades, open_positions).
-  4. Upsert closed_trades (dedup on stable id; never touches the user's
+  4. Enrich closed trades: contract detail (from Flex), a chronological
+     trade_seq, and underlying stock prices at entry / exit / now (Yahoo
+     Finance chart API -- keyless, one call per ticker).
+  5. Upsert closed_trades (dedup on stable id; never touches the user's
      journal columns) and reconcile open_positions (upsert current, delete
-     stale) in Supabase via the secret key (bypasses RLS).
+     stale), plus account_summary, in Supabase via the secret key.
 
 Env vars (all required except FLEX_QUERY_ID / FLEX_TIMEZONE):
   FLEX_TOKEN            IBKR Flex Web Service token
@@ -27,7 +29,7 @@ import os
 import sys
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 try:
     from zoneinfo import ZoneInfo
@@ -40,18 +42,23 @@ from trade_pipeline import run_pipeline
 
 FLEX_BASE = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService"
 FLEX_V = "3"
-USER_AGENT = "trade-journal-sync/1.0"
+YF_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/"
+USER_AGENT = "Mozilla/5.0 (compatible; trade-journal-sync/1.0)"
 HTTP_TIMEOUT = 60
 
-# Columns the sync job owns on closed_trades. Journal columns
-# (strategy, journal_thoughts, planned_stop, planned_target) and
-# contract_description are deliberately absent so an upsert never
-# overwrites what the user typed in the dashboard.
+MONTHS_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+               "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+# Columns the sync job owns on closed_trades. The user-editable journal columns
+# (strategy, journal_thoughts, planned_stop, planned_target) are deliberately
+# absent so an upsert never overwrites what the user typed in the dashboard.
 CLOSED_SYNC_COLUMNS = [
     "id", "symbol", "entry_time", "entry_price", "exit_time", "exit_price",
     "size", "pnl", "commission", "cost_basis", "return_pct", "days_held",
     "ambiguous", "ambiguous_reason", "entry_order_id", "exit_order_id",
-    "synced_at",
+    "contract_description", "contract_expiry", "contract_type", "contract_strike",
+    "underlying_price_entry", "underlying_price_exit", "underlying_price_latest",
+    "underlying_price_latest_at", "trade_seq", "synced_at",
 ]
 
 
@@ -265,13 +272,107 @@ def flex_to_account_summary(root: ET.Element, now_iso: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Enrichment: contract detail + underlying stock prices
+# ---------------------------------------------------------------------------
+def flex_contract_by_order(root: ET.Element) -> dict:
+    """{ str(orderId): {expiry, putCall, strike} } from the Flex Trade rows."""
+    out = {}
+    for tr in root.iter("Trade"):
+        a = tr.attrib
+        oid = a.get("ibOrderID") or a.get("orderID") or a.get("tradeID")
+        if not oid:
+            continue
+        out[str(oid)] = {
+            "expiry": (a.get("expiry") or "").strip() or None,
+            "putCall": (a.get("putCall") or "").strip().upper()[:1] or None,
+            "strike": _to_float(a.get("strike"), None),
+        }
+    return out
+
+
+def contract_desc(expiry: str | None, strike, put_call: str | None) -> str | None:
+    """'20261120', 19.0, 'C' -> '20NOV26 19 C'."""
+    parts = []
+    if expiry and len(expiry) == 8 and expiry.isdigit():
+        mon = MONTHS_ABBR[int(expiry[4:6]) - 1] if expiry[4:6].isdigit() else expiry[4:6]
+        parts.append(f"{int(expiry[6:])}{mon}{expiry[2:4]}")
+    if strike is not None:
+        parts.append(f"{strike:g}")
+    if put_call:
+        parts.append(put_call)
+    return " ".join(parts) or None
+
+
+def fetch_underlying_prices(tickers: set, since: "datetime.date") -> dict:
+    """
+    One Yahoo chart call per ticker. Returns
+      { ticker: {"latest": float|None, "latest_at": iso|None, "closes": {yyyy-mm-dd: float}} }
+    Best-effort: a failed ticker yields empty data, never raises.
+    """
+    p1 = int((datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
+              - timedelta(days=7)).timestamp())
+    p2 = int(datetime.now(timezone.utc).timestamp()) + 86400
+    out = {}
+    for t in sorted(tickers):
+        rec = {"latest": None, "latest_at": None, "closes": {}}
+        for attempt in (1, 2):
+            try:
+                r = requests.get(
+                    f"{YF_CHART}{t}",
+                    params={"period1": p1, "period2": p2, "interval": "1d"},
+                    headers={"User-Agent": USER_AGENT}, timeout=HTTP_TIMEOUT,
+                )
+                if r.status_code == 429 and attempt == 1:
+                    time.sleep(3)
+                    continue
+                r.raise_for_status()
+                res = (r.json().get("chart", {}).get("result") or [None])[0]
+                if not res:
+                    break
+                meta = res.get("meta", {}) or {}
+                rec["latest"] = meta.get("regularMarketPrice")
+                if meta.get("regularMarketTime"):
+                    rec["latest_at"] = (datetime.fromtimestamp(meta["regularMarketTime"], timezone.utc)
+                                        .isoformat().replace("+00:00", "Z"))
+                ts = res.get("timestamp") or []
+                closes = (((res.get("indicators") or {}).get("quote") or [{}])[0].get("close")) or []
+                for i, sec in enumerate(ts):
+                    c = closes[i] if i < len(closes) else None
+                    if c is not None:
+                        d = datetime.fromtimestamp(sec, timezone.utc).date().isoformat()
+                        rec["closes"][d] = round(float(c), 4)
+                break
+            except Exception as e:  # noqa: BLE001 - best-effort enrichment
+                if attempt == 2:
+                    log(f"  yahoo {t}: {e}")
+        out[t] = rec
+        time.sleep(0.25)
+    return out
+
+
+def close_on_or_before(closes: dict, iso_date: str | None) -> float | None:
+    if not iso_date:
+        return None
+    d = datetime.strptime(iso_date[:10], "%Y-%m-%d").date()
+    for _ in range(7):  # walk back over weekends / holidays
+        hit = closes.get(d.isoformat())
+        if hit is not None:
+            return hit
+        d -= timedelta(days=1)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # pipeline output -> Supabase rows
 # ---------------------------------------------------------------------------
 def _num(v):
     return None if v is None else v
 
 
-def closed_row(t: dict, now_iso: str) -> dict:
+def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict) -> dict:
+    c = (contracts.get(str(t.get("exit_order")))
+         or contracts.get(str(t.get("entry_order"))) or {})
+    px = prices.get(t["sym"], {})
     return {
         "id": t["id"],
         "symbol": t["sym"],
@@ -289,8 +390,22 @@ def closed_row(t: dict, now_iso: str) -> dict:
         "ambiguous_reason": t.get("reason"),
         "entry_order_id": t.get("entry_order"),
         "exit_order_id": t.get("exit_order"),
+        "contract_expiry": _iso_date(c.get("expiry")),
+        "contract_type": c.get("putCall"),
+        "contract_strike": _num(c.get("strike")),
+        "contract_description": contract_desc(c.get("expiry"), c.get("strike"), c.get("putCall")),
+        "underlying_price_entry": close_on_or_before(px.get("closes", {}), t.get("entry_time")),
+        "underlying_price_exit": close_on_or_before(px.get("closes", {}), t.get("exit_time")),
+        "underlying_price_latest": px.get("latest"),
+        "underlying_price_latest_at": px.get("latest_at"),
+        "trade_seq": t.get("_seq"),
         "synced_at": now_iso,
     }
+
+
+def _iso_date(v):
+    v = (v or "").strip()
+    return f"{v[:4]}-{v[4:6]}-{v[6:]}" if len(v) == 8 and v.isdigit() else (v or None)
 
 
 def open_row(p: dict, now_iso: str, expiry_by_conid: dict) -> dict:
@@ -391,9 +506,24 @@ def main() -> None:
     ambiguous = sum(1 for t in closed if t.get("ambiguous"))
     log(f"pipeline: {len(closed)} closed round-trips ({ambiguous} ambiguous), {len(opened)} open positions")
 
+    # --- enrich closed trades -------------------------------------------------
+    contracts = flex_contract_by_order(root)
+
+    # chronological sequence number (Nth closed round-trip to date)
+    for i, t in enumerate(sorted(closed, key=lambda x: (x.get("exit_time") or x.get("entry_time") or "")), 1):
+        t["_seq"] = i
+
+    tickers = {t["sym"] for t in closed if t.get("sym")}
+    dates = [(t.get("entry_time") or t.get("exit_time") or "")[:10] for t in closed]
+    earliest = min((d for d in dates if d), default=datetime.now(timezone.utc).date().isoformat())
+    log(f"fetching underlying prices for {len(tickers)} tickers (Yahoo)")
+    prices = fetch_underlying_prices(tickers, datetime.strptime(earliest, "%Y-%m-%d").date())
+    priced = sum(1 for p in prices.values() if p.get("latest") is not None)
+    log(f"  got current price for {priced}/{len(tickers)} tickers")
+
     sb = Supabase(supabase_url, secret_key)
 
-    closed_rows = [closed_row(t, now_iso) for t in closed]
+    closed_rows = [closed_row(t, now_iso, contracts, prices) for t in closed]
     sb.upsert("closed_trades", closed_rows)
     log(f"closed_trades: upserted {len(closed_rows)} rows (journal columns untouched)")
 
