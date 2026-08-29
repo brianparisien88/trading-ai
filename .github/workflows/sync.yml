@@ -6,7 +6,11 @@ name: Sync IBKR trades to Supabase
 
 on:
   schedule:
-    - cron: '0 23 * * *'   # 23:00 UTC daily (~a few hours after US market close)
+    # 12:00 UTC (~08:00 ET) — after IBKR's overnight batch finalises the prior
+    # trading day's Flex statement. Running earlier (e.g. just after the close)
+    # gets a statement that still ends the *previous* day, so same-day trades
+    # would lag two days instead of one.
+    - cron: '0 12 * * *'
   workflow_dispatch:        # manual "Run workflow" button
 
 concurrency:

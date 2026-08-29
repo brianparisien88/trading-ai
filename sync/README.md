@@ -35,8 +35,9 @@ pip install -r requirements.txt
 FLEX_TOKEN=... SUPABASE_URL=... SUPABASE_SECRET_KEY=... python sync.py
 ```
 
-Scheduled: `.github/workflows/sync.yml` runs it daily at 23:00 UTC (and on the
-manual **Run workflow** button).
+Scheduled: `.github/workflows/sync.yml` runs it daily at **12:00 UTC** (~08:00 ET),
+after IBKR's overnight batch finalises the prior trading day's Flex statement, plus
+the manual **Run workflow** button.
 
 ## GitHub setup (one time)
 

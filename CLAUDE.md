@@ -6,9 +6,9 @@ entries) + `docs/session_changelog_2026-08-26.md` + `docs/build_brief_*`.
 
 ## Architecture (deterministic ETL — no LLM at runtime)
 
-1. **Sync** (`sync/`, GitHub Actions daily 23:00 UTC): pull IBKR Flex Web Service XML
-   → reshape → `trade_pipeline.py` (merge fills by order → FIFO-pair → enrich →
-   derive) → write Supabase with the secret key.
+1. **Sync** (`sync/`, GitHub Actions daily 12:00 UTC ≈ 08:00 ET): pull IBKR Flex Web
+   Service XML → reshape → `trade_pipeline.py` (merge fills by order → FIFO-pair →
+   enrich → derive) → write Supabase with the secret key.
 2. **Database** (Supabase Postgres, project ref `wcbokczlllatengdrdes`, region us-west-2).
 3. **Dashboard** (`app/index.html`, GitHub Pages): reads Supabase live via supabase-js +
    publishable key; Supabase Auth (email/password) gates journal editing.
@@ -58,12 +58,14 @@ must never appear in `app/` or any committed file.
 
 ## Known behaviour — Flex data lag
 
-IBKR's Flex Web Service reports **open positions and NAV as of the prior business
-day's close**, not live. A position closed today still appears in `open_positions`
-(and `account_summary` is a day stale) until the next day's sync, which self-heals
-it — the closed trade lands in `closed_trades` and the position drops off. This is
-inherent to Flex (the headless/tokenised tradeoff); the live Client Portal API was
-deliberately not used. The dashboard labels the "as of" date on the Open tab.
+IBKR's Flex Web Service reports **open positions and NAV as of the prior *finalised*
+business day**, not live. IBKR finalises a day's statement in an overnight batch
+(ready ~05:00–08:00 ET next day), so the sync runs at 12:00 UTC to catch it. A
+position closed today lands in `closed_trades` and drops off `open_positions` on the
+*next* day's sync — a consistent ~1-day lag. (Running just after the market close
+instead would get a statement still ending the previous day, making it a 2-day lag.)
+This is inherent to Flex — the headless/tokenised tradeoff; the live Client Portal
+API was deliberately not used. The dashboard labels the "as of" date on the Open tab.
 
 ## Hard rules
 
