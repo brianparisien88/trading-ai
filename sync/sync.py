@@ -59,7 +59,8 @@ CLOSED_SYNC_COLUMNS = [
     "contract_description", "contract_expiry", "contract_type", "contract_strike",
     "underlying_price_entry", "underlying_price_exit", "underlying_price_latest",
     "underlying_price_latest_at", "underlying_price_horizon", "contract_horizon_date",
-    "underlying_price_peak", "underlying_peak_date", "trade_seq", "synced_at",
+    "underlying_price_peak", "underlying_peak_date", "vix_at_entry", "vix_at_exit",
+    "trade_seq", "synced_at",
 ]
 
 
@@ -304,51 +305,63 @@ def contract_desc(expiry: str | None, strike, put_call: str | None) -> str | Non
     return " ".join(parts) or None
 
 
-def fetch_underlying_prices(tickers: set, since: "datetime.date") -> dict:
-    """
-    One Yahoo chart call per ticker. Returns
-      { ticker: {"latest": float|None, "latest_at": iso|None, "closes": {yyyy-mm-dd: float}} }
-    Best-effort: a failed ticker yields empty data, never raises.
-    """
+def _yf_chart(symbol: str, p1: int, p2: int) -> dict:
+    """One Yahoo chart call. Returns {latest, latest_at, closes:{date:px}}; best-effort."""
+    rec = {"latest": None, "latest_at": None, "closes": {}}
+    for attempt in (1, 2):
+        try:
+            r = requests.get(
+                YF_CHART + symbol.replace("^", "%5E"),
+                params={"period1": p1, "period2": p2, "interval": "1d"},
+                headers={"User-Agent": USER_AGENT}, timeout=HTTP_TIMEOUT,
+            )
+            if r.status_code == 429 and attempt == 1:
+                time.sleep(3)
+                continue
+            r.raise_for_status()
+            res = (r.json().get("chart", {}).get("result") or [None])[0]
+            if not res:
+                break
+            meta = res.get("meta", {}) or {}
+            rec["latest"] = meta.get("regularMarketPrice")
+            if meta.get("regularMarketTime"):
+                rec["latest_at"] = (datetime.fromtimestamp(meta["regularMarketTime"], timezone.utc)
+                                    .isoformat().replace("+00:00", "Z"))
+            ts = res.get("timestamp") or []
+            closes = (((res.get("indicators") or {}).get("quote") or [{}])[0].get("close")) or []
+            for i, sec in enumerate(ts):
+                c = closes[i] if i < len(closes) else None
+                if c is not None:
+                    d = datetime.fromtimestamp(sec, timezone.utc).date().isoformat()
+                    rec["closes"][d] = round(float(c), 4)
+            break
+        except Exception as e:  # noqa: BLE001 - best-effort enrichment
+            if attempt == 2:
+                log(f"  yahoo {symbol}: {e}")
+    return rec
+
+
+def _period_bounds(since: "datetime.date"):
     p1 = int((datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
               - timedelta(days=7)).timestamp())
     p2 = int(datetime.now(timezone.utc).timestamp()) + 86400
+    return p1, p2
+
+
+def fetch_underlying_prices(tickers: set, since: "datetime.date") -> dict:
+    """{ ticker: {latest, latest_at, closes} } -- one Yahoo call per ticker, best-effort."""
+    p1, p2 = _period_bounds(since)
     out = {}
     for t in sorted(tickers):
-        rec = {"latest": None, "latest_at": None, "closes": {}}
-        for attempt in (1, 2):
-            try:
-                r = requests.get(
-                    f"{YF_CHART}{t}",
-                    params={"period1": p1, "period2": p2, "interval": "1d"},
-                    headers={"User-Agent": USER_AGENT}, timeout=HTTP_TIMEOUT,
-                )
-                if r.status_code == 429 and attempt == 1:
-                    time.sleep(3)
-                    continue
-                r.raise_for_status()
-                res = (r.json().get("chart", {}).get("result") or [None])[0]
-                if not res:
-                    break
-                meta = res.get("meta", {}) or {}
-                rec["latest"] = meta.get("regularMarketPrice")
-                if meta.get("regularMarketTime"):
-                    rec["latest_at"] = (datetime.fromtimestamp(meta["regularMarketTime"], timezone.utc)
-                                        .isoformat().replace("+00:00", "Z"))
-                ts = res.get("timestamp") or []
-                closes = (((res.get("indicators") or {}).get("quote") or [{}])[0].get("close")) or []
-                for i, sec in enumerate(ts):
-                    c = closes[i] if i < len(closes) else None
-                    if c is not None:
-                        d = datetime.fromtimestamp(sec, timezone.utc).date().isoformat()
-                        rec["closes"][d] = round(float(c), 4)
-                break
-            except Exception as e:  # noqa: BLE001 - best-effort enrichment
-                if attempt == 2:
-                    log(f"  yahoo {t}: {e}")
-        out[t] = rec
+        out[t] = _yf_chart(t, p1, p2)
         time.sleep(0.25)
     return out
+
+
+def fetch_vix(since: "datetime.date") -> dict:
+    """{ yyyy-mm-dd: VIX close } -- one Yahoo call for ^VIX."""
+    p1, p2 = _period_bounds(since)
+    return _yf_chart("^VIX", p1, p2).get("closes", {})
 
 
 def close_on_or_before(closes: dict, iso_date: str | None) -> float | None:
@@ -405,7 +418,7 @@ def _num(v):
     return None if v is None else v
 
 
-def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict) -> dict:
+def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict, vix: dict) -> dict:
     c = (contracts.get(str(t.get("exit_order")))
          or contracts.get(str(t.get("entry_order"))) or {})
     px = prices.get(t["sym"], {})
@@ -447,6 +460,8 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict) -> dict:
         "contract_horizon_date": hz_iso,
         "underlying_price_peak": peak_p,
         "underlying_peak_date": peak_d,
+        "vix_at_entry": close_on_or_before(vix, t.get("entry_time")),
+        "vix_at_exit": close_on_or_before(vix, t.get("exit_time")),
         "trade_seq": t.get("_seq"),
         "synced_at": now_iso,
     }
@@ -565,14 +580,17 @@ def main() -> None:
     tickers = {t["sym"] for t in closed if t.get("sym")}
     dates = [(t.get("entry_time") or t.get("exit_time") or "")[:10] for t in closed]
     earliest = min((d for d in dates if d), default=datetime.now(timezone.utc).date().isoformat())
+    since_date = datetime.strptime(earliest, "%Y-%m-%d").date()
     log(f"fetching underlying prices for {len(tickers)} tickers (Yahoo)")
-    prices = fetch_underlying_prices(tickers, datetime.strptime(earliest, "%Y-%m-%d").date())
+    prices = fetch_underlying_prices(tickers, since_date)
     priced = sum(1 for p in prices.values() if p.get("latest") is not None)
     log(f"  got current price for {priced}/{len(tickers)} tickers")
+    vix = fetch_vix(since_date)
+    log(f"  VIX history: {len(vix)} days")
 
     sb = Supabase(supabase_url, secret_key)
 
-    closed_rows = [closed_row(t, now_iso, contracts, prices) for t in closed]
+    closed_rows = [closed_row(t, now_iso, contracts, prices, vix) for t in closed]
     sb.upsert("closed_trades", closed_rows)
     log(f"closed_trades: upserted {len(closed_rows)} rows (journal columns untouched)")
 

@@ -205,6 +205,10 @@ function fmtDateShort(iso){ if(!iso) return '—'; const d=new Date(iso);
   return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
 function fmtExpiry(d){ if(!d) return '—'; const x=new Date(d+'T00:00:00');
   return x.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + " '" + String(x.getFullYear()).slice(2); }
+function fmtVix(v){ if(v==null) return '<span style="color:var(--dim)">—</span>';
+  v = Number(v);
+  const c = v>=22 ? 'var(--amber)' : v<15 ? 'var(--dim)' : 'var(--muted)';  // >=22 elevated, <15 calm
+  return `<span style="color:${c}">${v.toFixed(1)}</span>`; }
 function daysHeld(iso){ if(!iso) return null; const ms = Date.now()-new Date(iso).getTime(); return Math.floor(ms/86400000); }
 // % the underlying moved *in the trade's direction* between the exit and the
 // contract's own expiry (or today, if it hasn't expired). call = bullish (up is
@@ -293,6 +297,8 @@ function mapClosed(r){
     u_latest: r.underlying_price_latest,
     u_latest_at: r.underlying_price_latest_at,
     contract_horizon_date: r.contract_horizon_date,
+    vix_entry: r.vix_at_entry,
+    vix_exit: r.vix_at_exit,
     u_horizon: r.underlying_price_horizon,
     u_peak: r.underlying_price_peak,
     peak_date: r.underlying_peak_date,
@@ -472,6 +478,7 @@ const CLOSED_COLS = [
   {key:'sym', label:'Ticker'},
   {key:'days_held', label:'Days Held', hide:true},
   {key:'contract_cost', label:'Cost', hide:true},
+  {key:'vix_entry', label:'Entry VIX', hide:true},
   {key:'pnl', label:'P&L'},
   {key:'return_pct', label:'Return %', hide:true},
   {key:'since_exit', label:'If Held'},
@@ -645,6 +652,7 @@ function contextBlock(t){
     <div><span>Stock ${t.sym}</span> ${px(t.u_entry)} <span style="color:var(--dim)">entry</span> &rarr; ${px(t.u_exit)} <span style="color:var(--dim)">exit</span> &rarr; ${px(t.u_horizon)} <span style="color:var(--dim)">${hzLabel}</span>${t.contract_open?'':` &nbsp;&middot;&nbsp; ${px(t.u_latest)} <span style="color:var(--dim)">${latestWhen}</span>`}</div>
     ${seLine}
     ${pkLine}
+    ${t.vix_entry!=null ? `<div><span>VIX</span> ${Number(t.vix_entry).toFixed(1)} <span style="color:var(--dim)">at entry</span>${t.vix_exit!=null?` &rarr; ${Number(t.vix_exit).toFixed(1)} <span style="color:var(--dim)">at exit</span>`:''}</div>` : ''}
     <div><span>Trade #</span> ${t.trade_seq ?? '—'} of ${CLOSED_RAW.length}</div>
   </div>`;
 }
@@ -750,6 +758,7 @@ function renderRowsClosed(){
       <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''}${t.recovered?` <span class="badge rec" title="closed at a loss, then ran +${Math.round(t.peak_move)}% before expiry">rec</span>`:''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
       <td class="mono col-hide">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
       <td class="mono col-hide" style="color:var(--muted)">${t.contract_cost!=null ? fmt(t.contract_cost) : '—'}</td>
+      <td class="mono col-hide">${fmtVix(t.vix_entry)}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
       <td class="mono col-hide">${fmtReturn(t.return_pct)}</td>
       <td class="mono">${fmtSinceExit(t.since_exit)}</td>
