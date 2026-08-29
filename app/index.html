@@ -142,7 +142,7 @@
       <tbody id="rowsClosed"></tbody>
     </table>
     <div class="more" id="loadMore" style="display:none;">Show more</div>
-    <div class="data-note"><strong>Since Exit</strong> = how far the underlying stock has moved <em>in the trade's direction</em> since you closed (calls: up is favourable; puts: down). Green = holding would have helped, red = exiting was right. Stock prices are daily closes from Yahoo Finance; directional proxy only, not an options P&amp;L simulation. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot &mdash; verify against your broker.</div>
+    <div class="data-note"><strong>Since Exit</strong> = how far the underlying stock has moved <em>in the trade's direction</em> since you closed (calls: up is favourable; puts: down). <strong>Verdict</strong> bands it: <span class="pos">Should've held</span> ≥ +5%, <span class="neg">Right to exit</span> ≤ −5%, About even in between. Stock prices are daily closes from Yahoo Finance — directional proxy only, not an options P&amp;L simulation. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot; verify against your broker.</div>
   </div>
 </div>
 
@@ -207,6 +207,19 @@ function fmtSinceExit(v){
   const cls = v >= 0 ? 'pos' : 'neg';      // pos/green = holding would have helped
   return `<span class="${cls}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
 }
+// Verdict bands on the Since-Exit move (±5% dead zone).
+function verdictText(v){
+  if(v == null) return null;
+  if(v >= 5)  return "Should've held";
+  if(v <= -5) return "Right to exit";
+  return "About even";
+}
+function fmtVerdict(v){
+  const txt = verdictText(v);
+  if(txt == null) return '<span style="color:var(--dim)">—</span>';
+  const cls = v >= 5 ? 'pos' : v <= -5 ? 'neg' : '';
+  return cls ? `<span class="${cls}">${txt}</span>` : `<span style="color:var(--muted)">${txt}</span>`;
+}
 function showBanner(msg){ const b=document.getElementById('banner'); b.textContent=msg; b.classList.add('show'); }
 function hideBanner(){ document.getElementById('banner').classList.remove('show'); }
 function latestSync(rows){
@@ -262,6 +275,7 @@ function mapClosed(r){
     u_latest_at: r.underlying_price_latest_at,
     trade_seq: r.trade_seq,
     since_exit: sinceExitPct(r),                 // % the stock moved in the trade's favour since exit
+    verdict: sinceExitPct(r),                    // same number; rendered as a word (sorts numerically)
     // journal fields live on the row itself now
     strategy: r.strategy || '',
     journal_thoughts: r.journal_thoughts || '',
@@ -431,10 +445,11 @@ const CLOSED_COLS = [
   {key:'entry_time', label:'Date Opened'},
   {key:'sym', label:'Ticker'},
   {key:'days_held', label:'Days Held', hide:true},
-  {key:'contract_cost', label:'Cost'},
+  {key:'contract_cost', label:'Cost', hide:true},
   {key:'pnl', label:'P&L'},
-  {key:'return_pct', label:'Return %'},
+  {key:'return_pct', label:'Return %', hide:true},
   {key:'since_exit', label:'Since Exit'},
+  {key:'verdict', label:'Verdict'},
   {key:'strategy', label:'Strategy'},
 ];
 
@@ -551,7 +566,7 @@ function contextBlock(t){
   const latestWhen = t.u_latest_at ? new Date(t.u_latest_at).toLocaleDateString() : 'latest';
   const se = t.since_exit;
   const seLine = se==null ? ''
-    : `<div><span>Since exit</span> ${fmtSinceExit(se)} &nbsp;<span style="color:var(--dim)">${se>=0?'holding would have helped':'exiting was right'}</span></div>`;
+    : `<div><span>Since exit</span> ${fmtSinceExit(se)} &nbsp;${fmtVerdict(se)}</div>`;
   return `<div class="context">
     <div><span>Contract</span> ${contract}</div>
     <div><span>Contract cost</span> ${money(t.contract_cost)} <span style="color:var(--dim)">premium at entry</span></div>
@@ -659,10 +674,11 @@ function renderRowsClosed(){
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
       <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
       <td class="mono col-hide">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
-      <td class="mono" style="color:var(--muted)">${t.contract_cost!=null ? fmt(t.contract_cost) : '—'}</td>
+      <td class="mono col-hide" style="color:var(--muted)">${t.contract_cost!=null ? fmt(t.contract_cost) : '—'}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
-      <td class="mono">${fmtReturn(t.return_pct)}</td>
+      <td class="mono col-hide">${fmtReturn(t.return_pct)}</td>
       <td class="mono">${fmtSinceExit(t.since_exit)}</td>
+      <td>${fmtVerdict(t.since_exit)}</td>
       <td id="strat-${t.id}">${j.strategy || '—'}</td>
     </tr>
     <tr class="expand-row" id="exp-${t.id}"><td class="expand-cell" colspan="${CLOSED_COLS.length}" id="cell-${t.id}"></td></tr>`;
