@@ -142,7 +142,7 @@
       <tbody id="rowsClosed"></tbody>
     </table>
     <div class="more" id="loadMore" style="display:none;">Show more</div>
-    <div class="data-note"><strong>Since Exit</strong> = how far the underlying stock has moved <em>in the trade's direction</em> since you closed (calls: up is favourable; puts: down). <strong>Verdict</strong> bands it: <span class="pos">Should've held</span> ≥ +5%, <span class="neg">Right to exit</span> ≤ −5%, About even in between. Stock prices are daily closes from Yahoo Finance — directional proxy only, not an options P&amp;L simulation. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot; verify against your broker.</div>
+    <div class="data-note"><strong>If Held</strong> = how far the underlying moved <em>in the trade's direction</em> between your exit and <em>that contract's own expiry</em> (or today, if it hasn't expired) — calls: up is favourable; puts: down. Not measured to "today" regardless of how long ago the contract died. <strong>Verdict</strong>: <span class="pos">Should've held</span> ≥ +5%, <span class="neg">Right to exit</span> ≤ −5%, About even between. Expand a row for the peak favourable point within that window. Daily closes from Yahoo Finance — directional proxy, not an options P&amp;L simulation. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot.</div>
   </div>
 </div>
 
@@ -193,14 +193,20 @@ function fmt(n){ n = Number(n)||0; return (n<0?"-$":"$") + Math.abs(n).toFixed(2
 function fmtDateShort(iso){ if(!iso) return '—'; const d=new Date(iso);
   return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
 function daysHeld(iso){ if(!iso) return null; const ms = Date.now()-new Date(iso).getTime(); return Math.floor(ms/86400000); }
-// % the underlying has moved *in the trade's direction* since the exit date.
-// call = bullish (up is favourable), put = bearish (down is favourable).
-// positive => holding would have helped; negative => exiting was right.
-function sinceExitPct(r){
-  const ex = Number(r.underlying_price_exit), la = Number(r.underlying_price_latest);
-  if(!r.underlying_price_exit || !r.underlying_price_latest || ex === 0) return null;
-  const dir = (r.contract_type === 'P') ? -1 : 1;
-  return dir * (la - ex) / ex * 100;
+// % the underlying moved *in the trade's direction* between the exit and the
+// contract's own expiry (or today, if it hasn't expired). call = bullish (up is
+// favourable), put = bearish (down). positive => holding to expiry would have
+// helped; negative => exiting was right.
+function dirMove(exitPx, endPx, type){
+  const ex = Number(exitPx), en = Number(endPx);
+  if(!exitPx || !endPx || ex === 0) return null;
+  return ((type === 'P') ? -1 : 1) * (en - ex) / ex * 100;
+}
+function sinceExitPct(r){ return dirMove(r.underlying_price_exit, r.underlying_price_horizon, r.contract_type); }
+function peakPct(r){ return dirMove(r.underlying_price_exit, r.underlying_price_peak, r.contract_type); }
+function contractOpen(r){
+  if(!r.contract_expiry) return false;
+  return new Date(r.contract_expiry + 'T00:00:00') > new Date();
 }
 function fmtSinceExit(v){
   if(v == null) return '<span style="color:var(--dim)">—</span>';
@@ -273,8 +279,14 @@ function mapClosed(r){
     u_exit: r.underlying_price_exit,
     u_latest: r.underlying_price_latest,
     u_latest_at: r.underlying_price_latest_at,
+    contract_horizon_date: r.contract_horizon_date,
+    u_horizon: r.underlying_price_horizon,
+    u_peak: r.underlying_price_peak,
+    peak_date: r.underlying_peak_date,
+    contract_open: contractOpen(r),
     trade_seq: r.trade_seq,
-    since_exit: sinceExitPct(r),                 // % the stock moved in the trade's favour since exit
+    since_exit: sinceExitPct(r),                 // exit -> contract expiry (or today if still open)
+    peak_move: peakPct(r),                       // best favourable move within that window
     verdict: sinceExitPct(r),                    // same number; rendered as a word (sorts numerically)
     // journal fields live on the row itself now
     strategy: r.strategy || '',
@@ -448,7 +460,7 @@ const CLOSED_COLS = [
   {key:'contract_cost', label:'Cost', hide:true},
   {key:'pnl', label:'P&L'},
   {key:'return_pct', label:'Return %', hide:true},
-  {key:'since_exit', label:'Since Exit'},
+  {key:'since_exit', label:'If Held'},
   {key:'verdict', label:'Verdict'},
   {key:'strategy', label:'Strategy'},
 ];
@@ -562,16 +574,25 @@ function contextBlock(t){
   if(!t) return '';
   const money = v => v==null ? '—' : '$'+Number(v).toFixed(2);
   const px = v => v==null ? '—' : '$'+Number(v).toFixed(2);
+  const dt = v => v ? new Date(v + 'T00:00:00').toLocaleDateString() : '';
   const contract = [t.sym, t.contract_description].filter(Boolean).join(' ') || t.sym || '—';
-  const latestWhen = t.u_latest_at ? new Date(t.u_latest_at).toLocaleDateString() : 'latest';
-  const se = t.since_exit;
-  const seLine = se==null ? ''
-    : `<div><span>Since exit</span> ${fmtSinceExit(se)} &nbsp;${fmtVerdict(se)}</div>`;
+  const latestWhen = t.u_latest_at ? new Date(t.u_latest_at).toLocaleDateString() : 'now';
+
+  const hzLabel = t.contract_open
+    ? `today &middot; contract open to ${dt(t.contract_expiry)}`
+    : `at expiry ${dt(t.contract_expiry || t.contract_horizon_date)}`;
+  const se = t.since_exit, pk = t.peak_move;
+  const seLine = se==null ? '' : `<div><span>If held</span> ${fmtSinceExit(se)} &nbsp;${fmtVerdict(se)}
+      ${t.contract_open?'<span style="color:var(--dim)">(so far)</span>':''}</div>`;
+  const pkLine = (pk==null || Math.abs(pk - (se||0)) < 0.5) ? ''
+    : `<div><span>Peak</span> ${fmtSinceExit(pk)} <span style="color:var(--dim)">best point, ${dt(t.peak_date)}</span></div>`;
+
   return `<div class="context">
     <div><span>Contract</span> ${contract}</div>
     <div><span>Contract cost</span> ${money(t.contract_cost)} <span style="color:var(--dim)">premium at entry</span></div>
-    <div><span>Stock ${t.sym}</span> ${px(t.u_entry)} <span style="color:var(--dim)">entry</span> &rarr; ${px(t.u_exit)} <span style="color:var(--dim)">exit</span> &rarr; ${px(t.u_latest)} <span style="color:var(--dim)">${latestWhen}</span></div>
+    <div><span>Stock ${t.sym}</span> ${px(t.u_entry)} <span style="color:var(--dim)">entry</span> &rarr; ${px(t.u_exit)} <span style="color:var(--dim)">exit</span> &rarr; ${px(t.u_horizon)} <span style="color:var(--dim)">${hzLabel}</span>${t.contract_open?'':` &nbsp;&middot;&nbsp; ${px(t.u_latest)} <span style="color:var(--dim)">${latestWhen}</span>`}</div>
     ${seLine}
+    ${pkLine}
     <div><span>Trade #</span> ${t.trade_seq ?? '—'} of ${CLOSED_RAW.length}</div>
   </div>`;
 }

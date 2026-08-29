@@ -95,6 +95,9 @@ Repo **Settings → Secrets and variables → Actions**:
   ticker Yahoo can't resolve just leaves those fields null; the sync never fails
   over price data. Entry/exit use the close on or before that date (walks back
   over weekends/holidays); latest is refreshed every run.
-- The dashboard derives **"Since Exit"** from `_exit` vs `_latest` and
-  `contract_type` — a *directional* proxy ("was I right about direction after I
-  got out?"), not an options-P&L simulation.
+- **Contract-aware "If Held"**: `underlying_price_horizon` is the underlying
+  close at `min(contract_expiry, today)`, and `underlying_price_peak` /
+  `underlying_peak_date` are the most favourable close between exit and that
+  horizon (highest for a call, lowest for a put). So the dashboard's "If Held"
+  and "Verdict" measure the move over *the contract's actual life*, not "to
+  today regardless of when it expired". Directional proxy, not an options P&L.

@@ -13,6 +13,7 @@ Schema for the trade journal. Two tables, per [`docs/supabase_schema_draft.md`](
 | `migrations/20260827130000_journal_edit_policy.sql` | Locks down blanket write grants; lets a signed-in user (Supabase Auth) update only the 4 journal columns on `closed_trades`. Applied 2026-08-27. |
 | `migrations/20260828000000_account_summary.sql` | Single-row `account_summary` table (base-currency balances) + public read. Applied 2026-08-27. |
 | `migrations/20260829120000_closed_trades_context.sql` | Adds contract detail + underlying-price + `trade_seq` columns to `closed_trades`. |
+| `migrations/20260829180000_closed_trades_horizon.sql` | Adds `underlying_price_horizon` / `contract_horizon_date` / `underlying_price_peak` / `underlying_peak_date` — the contract-expiry-aware "If Held" comparison. |
 
 ## Applying the initial migration
 

@@ -58,7 +58,8 @@ CLOSED_SYNC_COLUMNS = [
     "ambiguous", "ambiguous_reason", "entry_order_id", "exit_order_id",
     "contract_description", "contract_expiry", "contract_type", "contract_strike",
     "underlying_price_entry", "underlying_price_exit", "underlying_price_latest",
-    "underlying_price_latest_at", "trade_seq", "synced_at",
+    "underlying_price_latest_at", "underlying_price_horizon", "contract_horizon_date",
+    "underlying_price_peak", "underlying_peak_date", "trade_seq", "synced_at",
 ]
 
 
@@ -362,6 +363,41 @@ def close_on_or_before(closes: dict, iso_date: str | None) -> float | None:
     return None
 
 
+def favorable_extreme(closes: dict, start_iso: str, end_iso: str, is_put: bool):
+    """
+    Most favourable daily close in [start, end] -- highest for a call, lowest for
+    a put. Returns (price, date_iso), or (None, None) if the window is empty.
+    """
+    try:
+        s = datetime.strptime(start_iso[:10], "%Y-%m-%d").date()
+        e = datetime.strptime(end_iso[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None, None
+    best_p, best_d, d = None, None, s
+    while d <= e:
+        c = closes.get(d.isoformat())
+        if c is not None and (best_p is None or (c < best_p if is_put else c > best_p)):
+            best_p, best_d = c, d.isoformat()
+        d += timedelta(days=1)
+    return best_p, best_d
+
+
+def horizon_date(expiry: str | None, exit_iso: str | None) -> "datetime.date":
+    """
+    The date the 'if I had held' comparison runs to: the contract's expiry, or
+    today if it hasn't expired yet. Falls back to exit + 90 days when the Flex
+    record has no expiry (most of this account's contracts are ~3 months).
+    """
+    today = datetime.now(timezone.utc).date()
+    if expiry and len(expiry) == 8 and expiry.isdigit():
+        exp = datetime.strptime(expiry, "%Y%m%d").date()
+    elif exit_iso:
+        exp = datetime.strptime(exit_iso[:10], "%Y-%m-%d").date() + timedelta(days=90)
+    else:
+        return today
+    return min(exp, today)
+
+
 # ---------------------------------------------------------------------------
 # pipeline output -> Supabase rows
 # ---------------------------------------------------------------------------
@@ -373,6 +409,15 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict) -> dict:
     c = (contracts.get(str(t.get("exit_order")))
          or contracts.get(str(t.get("entry_order"))) or {})
     px = prices.get(t["sym"], {})
+    closes = px.get("closes", {})
+
+    # "if I had held this contract" comparison, measured to the contract's own
+    # expiry (or to today if it hasn't expired yet).
+    hz = horizon_date(c.get("expiry"), t.get("exit_time"))
+    hz_iso = hz.isoformat()
+    is_put = c.get("putCall") == "P"
+    peak_p, peak_d = favorable_extreme(closes, (t.get("exit_time") or hz_iso), hz_iso, is_put)
+
     return {
         "id": t["id"],
         "symbol": t["sym"],
@@ -394,10 +439,14 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict) -> dict:
         "contract_type": c.get("putCall"),
         "contract_strike": _num(c.get("strike")),
         "contract_description": contract_desc(c.get("expiry"), c.get("strike"), c.get("putCall")),
-        "underlying_price_entry": close_on_or_before(px.get("closes", {}), t.get("entry_time")),
-        "underlying_price_exit": close_on_or_before(px.get("closes", {}), t.get("exit_time")),
+        "underlying_price_entry": close_on_or_before(closes, t.get("entry_time")),
+        "underlying_price_exit": close_on_or_before(closes, t.get("exit_time")),
         "underlying_price_latest": px.get("latest"),
         "underlying_price_latest_at": px.get("latest_at"),
+        "underlying_price_horizon": close_on_or_before(closes, hz_iso) if t.get("exit_time") else None,
+        "contract_horizon_date": hz_iso,
+        "underlying_price_peak": peak_p,
+        "underlying_peak_date": peak_d,
         "trade_seq": t.get("_seq"),
         "synced_at": now_iso,
     }
