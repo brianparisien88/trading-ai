@@ -82,6 +82,9 @@
   .flag-note{font-size:11.5px; color:var(--amber); margin-bottom:8px; padding:6px 8px; background:rgba(212,167,44,.08); border-radius:6px;}
   .lock-note{font-size:11px; color:var(--dim); margin-bottom:8px; padding:6px 8px; background:var(--surface); border-radius:6px;}
   .context{font-size:12px; color:var(--text); margin-bottom:12px; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:6px; line-height:1.7;}
+  .scorekey{font-size:11px; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-bottom:12px; line-height:1.9;}
+  .scorekey b{color:var(--text); font-weight:600; display:inline-block; min-width:92px;}
+  .scorekey .g{color:var(--dim);}
   .context div span:first-child{display:inline-block; min-width:96px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim);}
   .field{margin-top:8px;}
   .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim); margin-bottom:5px;}
@@ -140,7 +143,8 @@
       <button id="anRun" style="background:var(--blue); border:none; color:#fff; border-radius:6px; padding:9px 18px; font-size:13px; font-weight:500; cursor:pointer;">Analyze</button>
       <span id="anMsg" style="font-size:12px; margin-left:10px; color:var(--muted);"></span>
     </div>
-    <div id="anResult" style="margin-top:18px;"></div>
+    <div class="scorekey" id="scoreKeyAnalyze" style="margin-top:16px; max-width:560px;"></div>
+    <div id="anResult" style="margin-top:14px;"></div>
     <div class="data-note">Live daily data from Yahoo via a Supabase edge function. Score is technical only — same factors used to backfill your closed trades' Setup Score. It does not know your thesis text (yet).</div>
   </div>
 
@@ -169,6 +173,7 @@
       </div>
       <div class="synced" id="syncedClosed"></div>
     </div>
+    <div class="scorekey" id="scoreKeyClosed"></div>
     <table class="ledger" id="tableClosed">
       <thead><tr id="theadClosed"></tr></thead>
       <tbody id="rowsClosed"></tbody>
@@ -392,6 +397,18 @@ async function loadData(){
     };
   }
 }
+
+const SCORE_KEY_HTML = `
+  <div><b>Setup score</b> <span style="color:var(--dim)">−6 … +6, technical only</span> &nbsp;
+    <span class="pos">strong ≥ 4</span> · <span style="color:var(--muted)">ok 1–3</span> · <span class="neg">weak ≤ 0</span>
+    &nbsp;<span class="g">= trend structure ±3 · not-extended ±2 · range position ±1</span></div>
+  <div><b>Trade grade</b> <span style="color:var(--dim)">post-mortem</span> &nbsp;
+    <span class="pos">A ≥ 6</span> · <span style="color:var(--muted)">B 3–5</span> · <span style="color:var(--amber)">C 0–2</span> · <span class="neg">D ≤ −1</span>
+    &nbsp;<span class="g">= contract fit + hold discipline + outcome</span></div>`;
+function fillScoreKeys(){
+  ['scoreKeyClosed','scoreKeyAnalyze'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=SCORE_KEY_HTML; });
+}
+fillScoreKeys();
 
 const ANALYZE_URL = SUPABASE_URL + '/functions/v1/analyze-setup';
 async function runAnalyze(){
