@@ -101,3 +101,9 @@ Repo **Settings → Secrets and variables → Actions**:
   horizon (highest for a call, lowest for a put). So the dashboard's "If Held"
   and "Verdict" measure the move over *the contract's actual life*, not "to
   today regardless of when it expired". Directional proxy, not an options P&L.
+- **Templated trend reads**: `trend_features()` snapshots the chart (price vs
+  20/50-day avg, 5/20-day momentum, range position, MA slope) at the entry and
+  exit dates; `classify_setup()` labels it (`setup_entry`); `entry_read()` /
+  `exit_read()` assemble deterministic prose (no LLM) into `chart_read_entry` /
+  `chart_read_exit`. `price_window` stores ~45 trading days each side for the
+  panel's inline chart.

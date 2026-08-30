@@ -74,9 +74,11 @@ API was deliberately not used. The dashboard labels the "as of" date on the Open
   `planned_stop`, `planned_target`) — the sync payload deliberately omits them.
 - **Historical 242-trade backfill is DEFERRED.** Don't attempt it, and never source
   fills from chat transcripts — only a real IBKR export or the sync's own window.
-- `closed_trades` contract detail (`contract_description` / `contract_expiry` /
-  `contract_type` / `contract_strike`) and underlying prices are **sync-owned** —
-  read from Flex + Yahoo, not user-editable, safe to recompute every run.
+- `closed_trades` contract detail, underlying prices, `vix_at_*`, `price_window`,
+  `setup_entry`, and the `chart_read_*` templated blurbs are all **sync-owned** —
+  computed from Flex + Yahoo (no LLM), not user-editable, recomputed every run.
+- `price_window` (jsonb, bulky) is excluded from the dashboard's bulk load and
+  lazy-fetched per row on expand.
 - Ambiguous FIFO pairings (`ambiguous = true`) are shown, never silently trusted.
 - Account-level figures (`account_summary`) are CAD (base currency); position-level
   figures are USD. Always label currency; never combine them unlabeled.

@@ -14,6 +14,8 @@ Schema for the trade journal. Two tables, per [`docs/supabase_schema_draft.md`](
 | `migrations/20260828000000_account_summary.sql` | Single-row `account_summary` table (base-currency balances) + public read. Applied 2026-08-27. |
 | `migrations/20260829120000_closed_trades_context.sql` | Adds contract detail + underlying-price + `trade_seq` columns to `closed_trades`. |
 | `migrations/20260829180000_closed_trades_horizon.sql` | Adds `underlying_price_horizon` / `contract_horizon_date` / `underlying_price_peak` / `underlying_peak_date` — the contract-expiry-aware "If Held" comparison. |
+| `migrations/20260829200000_closed_trades_vix.sql` | Adds `vix_at_entry` / `vix_at_exit`. |
+| `migrations/20260830120000_closed_trades_chart_reads.sql` | Adds `price_window` / `setup_entry` / `chart_read_entry` / `chart_read_exit` — the mini price chart + templated trend reads. |
 
 ## Applying the initial migration
 
