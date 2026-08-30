@@ -308,6 +308,10 @@ function mapOpen(r){
     oi: r.open_interest,
     unverified_entry_date: r.unverified_entry_date,
     synced_at: r.synced_at,
+    strategy: r.strategy || '',
+    journal_thoughts: r.journal_thoughts || '',
+    planned_stop: r.planned_stop,
+    planned_target: r.planned_target,
   };
 }
 function mapClosed(r){
@@ -387,15 +391,15 @@ async function loadData(){
   ACCOUNT = acctRes && !acctRes.error ? acctRes.data : null;  // may be null until first sync with NAV/Cash sections
   OPEN_RAW = (openRes.data || []).map(mapOpen);
   CLOSED_RAW = (closedRes.data || []).map(mapClosed);
-  // seed journal cache from the rows
-  for(const t of CLOSED_RAW){
-    journalCache[t.id] = {
-      strategy: t.strategy,
-      thoughts: t.journal_thoughts,
-      stop: t.planned_stop == null ? '' : String(t.planned_stop),
-      target: t.planned_target == null ? '' : String(t.planned_target),
-    };
-  }
+  // seed journal cache from the rows (both tabs)
+  const seed = t => journalCache[t.id] = {
+    strategy: t.strategy,
+    thoughts: t.journal_thoughts,
+    stop: t.planned_stop == null ? '' : String(t.planned_stop),
+    target: t.planned_target == null ? '' : String(t.planned_target),
+  };
+  CLOSED_RAW.forEach(seed);
+  OPEN_RAW.forEach(seed);
 }
 
 const SCORE_KEY_HTML = `
@@ -485,6 +489,7 @@ function canEdit(){ return !!(session && session.user); }
 /* refresh any open journal editors when auth state flips */
 function refreshOpenEditors(){
   document.querySelectorAll('.expand-row.open').forEach(row=>{
+    if(row.id.startsWith('oexp-')){ renderOpenBody(row.id.replace('oexp-','')); return; }
     const id = row.id.replace('exp-','');
     const t = CLOSED_RAW.find(x=>x.id===id);
     renderBody(id, t && t.ambiguous ? ('Flagged: ' + t.reason + '. Verify against your broker before trusting this P&L split.') : null);
@@ -560,8 +565,10 @@ function renderRowsOpen(){
   });
   const body = document.getElementById('rowsOpen');
   if(!filtered.length){ body.innerHTML = `<tr><td class="empty" colspan="${OPEN_COLS.length}">No open positions.</td></tr>`; return; }
-  body.innerHTML = filtered.map(o => `<tr>
-      <td class="sym">${o.sym}${o.unverified_entry_date?' <span class="badge warn">entry?</span>':''}</td>
+  body.innerHTML = filtered.map(o => {
+    const j = journalCache[o.id] || {};
+    return `<tr class="main-row" onclick="toggleOpenRow('${o.id}')">
+      <td class="sym">${o.sym}${o.unverified_entry_date?' <span class="badge warn">entry?</span>':''} <span class="journal-flag" id="oflag-${o.id}">${(j.strategy||j.thoughts)?'logged':'—'}</span></td>
       <td class="desc col-hide">${o.desc}</td>
       <td class="mono" style="color:var(--muted)">${o.entry_px!=null?'@'+o.entry_px:'—'}</td>
       <td class="mono">${o.dte!=null ? o.dte+'d' : '—'}</td>
@@ -570,7 +577,40 @@ function renderRowsOpen(){
       <td class="mono" style="color:var(--muted)">${o.oi!=null ? Number(o.oi).toLocaleString() : '—'}</td>
       <td class="mono ${o.daily_pnl>=0?'pos':'neg'} col-hide">${fmt(o.daily_pnl)}</td>
       <td class="mono ${o.unrealized_pnl>=0?'pos':'neg'}">${fmt(o.unrealized_pnl)}</td>
-    </tr>`).join('');
+    </tr>
+    <tr class="expand-row" id="oexp-${o.id}"><td class="expand-cell" colspan="${OPEN_COLS.length}" id="ocell-${o.id}"></td></tr>`;
+  }).join('');
+  for(const o of filtered){ if(openRowsState['o:'+o.id]){ document.getElementById('oexp-'+o.id).classList.add('open'); renderOpenBody(o.id); } }
+}
+function updateOpenFlag(id){
+  const el = document.getElementById('oflag-'+id); if(!el) return;
+  const j = journalCache[id] || {};
+  el.textContent = (j.strategy||j.thoughts) ? 'logged' : '—';
+  el.classList.toggle('filled', !!(j.strategy||j.thoughts));
+}
+async function toggleOpenRow(id){
+  const row = document.getElementById('oexp-'+id);
+  const isOpen = row.classList.contains('open');
+  if(isOpen){ row.classList.remove('open'); openRowsState['o:'+id]=false; return; }
+  row.classList.add('open'); openRowsState['o:'+id]=true;
+  renderOpenBody(id);
+}
+window.toggleOpenRow = toggleOpenRow;
+function renderOpenBody(id){
+  const cell = document.getElementById('ocell-'+id);
+  if(!cell) return;
+  const o = OPEN_RAW.find(x=>x.id===id) || {};
+  const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
+  const rr = document.createElement('div');
+  cell.innerHTML = `<div class="context"><div><span>Contract</span> ${[o.sym,o.desc].filter(Boolean).join(' ')}</div>
+    <div><span>Entry</span> @${o.entry_px} <span style="color:var(--dim)">· cost $${(Number(o.cost_basis)||0).toFixed(2)} · unrealized ${fmt(o.unrealized_pnl)} · ${o.dte!=null?o.dte+' DTE':''}</span></div>
+    <div id="orr-${id}" class="save-note">${rrText(j, o.entry_px, null)}</div></div>
+    <div id="ojournal-${id}"></div>`;
+  mountJournalEditor(document.getElementById('ojournal-'+id), 'open_positions', id, j);
+  // live R:R while typing
+  document.getElementById('ojournal-'+id).querySelectorAll('input,select,textarea').forEach(el=>{
+    el.addEventListener('input', ()=>{ const e=document.getElementById('orr-'+id); if(e) e.textContent = rrText(journalCache[id]||j, o.entry_px, null); });
+  });
 }
 
 /* ============================================================================
@@ -686,7 +726,7 @@ const openRowsState = {};
 function loadJournal(id){
   return journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
 }
-async function saveJournal(id, obj){
+async function saveJournal(table, id, obj){
   if(!canEdit()) return {ok:false, msg:'Log in to save'};
   const num = v => (v === '' || v == null) ? null : (isNaN(Number(v)) ? null : Number(v));
   const patch = {
@@ -697,9 +737,10 @@ async function saveJournal(id, obj){
   };
   let lastErr = 'save failed';
   for(let attempt=1; attempt<=3; attempt++){
-    const { error } = await db.from('closed_trades').update(patch).eq('id', id);
+    const { error } = await db.from(table).update(patch).eq('id', id);
     if(!error){
-      const row = CLOSED_RAW.find(x=>x.id===id);
+      const pool = table === 'open_positions' ? OPEN_RAW : CLOSED_RAW;
+      const row = pool.find(x=>x.id===id);
       if(row){ row.strategy=patch.strategy||''; row.journal_thoughts=patch.journal_thoughts||'';
         row.planned_stop=patch.planned_stop; row.planned_target=patch.planned_target; }
       return {ok:true};
@@ -708,6 +749,46 @@ async function saveJournal(id, obj){
     await new Promise(r=>setTimeout(r, 400*attempt));
   }
   return {ok:false, msg:lastErr};
+}
+
+// Shared journal editor: renders into cellEl and wires autosave against `table`.
+function mountJournalEditor(cellEl, table, id, j){
+  const dis = canEdit() ? '' : 'disabled';
+  const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;";
+  cellEl.innerHTML =
+    (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) + `
+    <div class="field"><label>Strategy</label>
+      <select data-field="strategy" ${dis}>${strategyOptionsHTML(j.strategy)}</select></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div class="field"><label>Planned Stop ($)</label>
+        <input type="number" step="0.01" data-field="stop" value="${j.stop||''}" ${dis} style="${inputStyle}"></div>
+      <div class="field"><label>Planned Target ($)</label>
+        <input type="number" step="0.01" data-field="target" value="${j.target||''}" ${dis} style="${inputStyle}"></div>
+    </div>
+    <div class="field"><label>Journaling thoughts</label>
+      <textarea data-field="thoughts" placeholder="Thesis, plan, what would change your mind..." ${dis}>${j.thoughts||''}</textarea></div>
+    <div class="save-note" data-note>${canEdit() ? 'Autosaves as you type' : ''}</div>`;
+  if(!canEdit()) return;
+  cellEl.querySelectorAll('textarea,select,input').forEach(el=>{
+    let timer;
+    el.addEventListener('input', ()=>{
+      clearTimeout(timer);
+      const note = cellEl.querySelector('[data-note]');
+      timer = setTimeout(async ()=>{
+        j[el.getAttribute('data-field')] = el.value;
+        journalCache[id] = j;
+        if(note){ note.textContent='Saving...'; note.classList.remove('err'); note.style.color='var(--dim)'; }
+        const res = await saveJournal(table, id, j);
+        if(note){
+          if(res.ok){ note.textContent='Saved'; note.style.color='var(--green)';
+            setTimeout(()=>{ note.textContent='Autosaves as you type'; note.style.color='var(--dim)'; },1200); }
+          else { note.textContent = res.msg || 'Not saved — try again'; note.classList.add('err'); }
+        }
+        if(table==='open_positions') updateOpenFlag(id);
+        else { updateFlag(id); updateStrategyCell(id); }
+      }, 500);
+    });
+  });
 }
 
 function renderTheadClosed(){
@@ -852,7 +933,7 @@ function renderBody(id, ambNote){
         const fid = el.getAttribute('data-id');
         journalCache[fid][el.getAttribute('data-field')] = el.value;
         if(note){ note.textContent = 'Saving...'; note.classList.remove('err'); note.style.color='var(--dim)'; }
-        const res = await saveJournal(fid, journalCache[fid]);
+        const res = await saveJournal('closed_trades', fid, journalCache[fid]);
         if(note){
           if(res.ok){
             note.textContent = 'Saved'; note.classList.remove('err'); note.style.color='var(--green)';

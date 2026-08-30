@@ -221,6 +221,7 @@ def flex_to_raw_positions(root: ET.Element) -> list[dict]:
         qty = _to_float(a.get("position"))
         if qty == 0:
             continue
+        oid = a.get("originatingOrderID") or a.get("originatingTransactionID")
         out.append({
             "contract_id": a.get("conid"),
             "contract_description": a.get("description") or a.get("symbol") or "",
@@ -232,6 +233,7 @@ def flex_to_raw_positions(root: ET.Element) -> list[dict]:
             "unrealized_pnl": _to_float(a.get("fifoPnlUnrealized")),
             "daily_pnl": 0.0,  # not in an Activity Flex Query
             "currency": a.get("currency"),
+            "entry_order_id": int(oid) if oid and str(oid).isdigit() else None,
         })
     return out
 
@@ -808,13 +810,13 @@ def _iso_date(v):
     return f"{v[:4]}-{v[4:6]}-{v[6:]}" if len(v) == 8 and v.isdigit() else (v or None)
 
 
-def open_row(p: dict, now_iso: str, expiry_by_conid: dict) -> dict:
+def open_row(p: dict, now_iso: str, expiry_by_conid: dict, order_by_conid: dict) -> dict:
     # p["id"] is "open_{conid}". Prefer the pipeline's dte; fall back to the
     # explicit Flex expiry attribute (the pipeline's parser expects the old
     # IBKR-MCP description format and won't match Flex's).
+    conid = str(p["id"]).replace("open_", "", 1)
     dte = p.get("dte")
     if dte is None:
-        conid = str(p["id"]).replace("open_", "", 1)
         dte = dte_from_expiry(expiry_by_conid.get(conid, ""))
     return {
         "id": p["id"],
@@ -828,6 +830,7 @@ def open_row(p: dict, now_iso: str, expiry_by_conid: dict) -> dict:
         "daily_pnl": _num(p.get("daily_pnl")),
         "dte": _num(dte),
         "unverified_entry_date": bool(p.get("unverified_entry_date")),
+        "entry_order_id": order_by_conid.get(conid),
         "synced_at": now_iso,
     }
 
@@ -856,6 +859,12 @@ class Supabase:
             )
             if not r.ok:
                 die(f"Supabase upsert {table} failed ({r.status_code}): {r.text[:300]}")
+
+    def get(self, table: str, select: str) -> list[dict]:
+        r = requests.get(f"{self.base}/{table}", params={"select": select},
+                         headers=self.headers, timeout=HTTP_TIMEOUT)
+        r.raise_for_status()
+        return r.json()
 
     def delete_not_in(self, table: str, keep_ids: list[str]) -> int:
         """Delete rows whose id is not in keep_ids (delete all if keep_ids empty)."""
@@ -908,6 +917,23 @@ def main() -> None:
 
     # --- enrich closed trades -------------------------------------------------
     contracts = flex_contract_by_order(root)
+    order_by_conid = {p["contract_id"]: p.get("entry_order_id")
+                      for p in raw_positions if p.get("contract_id")}
+
+    sb = Supabase(supabase_url, secret_key)
+
+    # journal notes currently on open positions -> carry to the round-trip when it closes
+    open_notes = {}  # entry_order_id -> {strategy, journal_thoughts, planned_stop, planned_target}
+    try:
+        cur = sb.get("open_positions", "entry_order_id,strategy,journal_thoughts,planned_stop,planned_target")
+        for r in cur:
+            oid = r.get("entry_order_id")
+            if oid and any(r.get(k) is not None for k in
+                           ("strategy", "journal_thoughts", "planned_stop", "planned_target")):
+                open_notes[oid] = {k: r.get(k) for k in
+                                   ("strategy", "journal_thoughts", "planned_stop", "planned_target")}
+    except Exception as e:  # noqa: BLE001
+        log(f"  (could not read open-position notes: {e})")
 
     # chronological sequence number (Nth closed round-trip to date)
     for i, t in enumerate(sorted(closed, key=lambda x: (x.get("exit_time") or x.get("entry_time") or "")), 1):
@@ -924,13 +950,20 @@ def main() -> None:
     vix = fetch_vix(since_date)
     log(f"  VIX history: {len(vix)} days")
 
-    sb = Supabase(supabase_url, secret_key)
-
-    closed_rows = [closed_row(t, now_iso, contracts, prices, vix) for t in closed]
+    closed_rows = []
+    carried = 0
+    for t in closed:
+        row = closed_row(t, now_iso, contracts, prices, vix)
+        note = open_notes.get(t.get("entry_order"))
+        if note:
+            row.update({k: v for k, v in note.items() if v is not None})
+            carried += 1
+        closed_rows.append(row)
     sb.upsert("closed_trades", closed_rows)
-    log(f"closed_trades: upserted {len(closed_rows)} rows (journal columns untouched)")
+    log(f"closed_trades: upserted {len(closed_rows)} rows "
+        f"({carried} carried journal notes from a just-closed position)")
 
-    open_rows = [open_row(p, now_iso, expiry_by_conid) for p in opened]
+    open_rows = [open_row(p, now_iso, expiry_by_conid, order_by_conid) for p in opened]
     if open_rows:
         sb.upsert("open_positions", open_rows)
     removed = sb.delete_not_in("open_positions", [r["id"] for r in open_rows])
