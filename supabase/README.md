@@ -16,6 +16,11 @@ Schema for the trade journal. Two tables, per [`docs/supabase_schema_draft.md`](
 | `migrations/20260829180000_closed_trades_horizon.sql` | Adds `underlying_price_horizon` / `contract_horizon_date` / `underlying_price_peak` / `underlying_peak_date` — the contract-expiry-aware "If Held" comparison. |
 | `migrations/20260829200000_closed_trades_vix.sql` | Adds `vix_at_entry` / `vix_at_exit`. |
 | `migrations/20260830120000_closed_trades_chart_reads.sql` | Adds `price_window` / `setup_entry` / `chart_read_entry` / `chart_read_exit` — the mini price chart + templated trend reads. |
+| `migrations/20260830180000_closed_trades_setup_score_grade.sql` | Adds `setup_score`/`setup_structure`/`setup_reasons`/`setup_criteria` (static technical) + `trade_grade`/`grade_points`/`grade_reasons` (post-mortem). |
+
+## Edge functions
+
+| `functions/analyze-setup/` | Live Setup Score for a prospective trade. `POST {ticker, side}` → fetches Yahoo (server-side), returns score + pass/fail criteria + contract band. `verify_jwt: false`, no DB, no secrets. Called by the dashboard's Analyze tab. |
 
 ## Applying the initial migration
 

@@ -12,7 +12,11 @@ entries) + `docs/session_changelog_2026-08-26.md` + `docs/build_brief_*`.
    keyless chart API, one call/ticker) → write Supabase with the secret key.
 2. **Database** (Supabase Postgres, project ref `wcbokczlllatengdrdes`, region us-west-2).
 3. **Dashboard** (`app/index.html`, GitHub Pages): reads Supabase live via supabase-js +
-   publishable key; Supabase Auth (email/password) gates journal editing.
+   publishable key; Supabase Auth (email/password) gates journal editing. 3 tabs —
+   Open Trades, Trade History, **Analyze a Trade** (calls the `analyze-setup` edge
+   function for a live Setup Score on a prospective trade).
+4. **Edge functions** (`supabase/functions/`): `analyze-setup` — Yahoo proxy +
+   Setup Score, verify_jwt off, no DB access, no secrets.
 
 Claude's role is judgment work only (ambiguous-pair review, trend analysis), never the
 daily ETL. The IBKR MCP connector is **not** used by the sync.
