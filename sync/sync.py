@@ -61,6 +61,8 @@ CLOSED_SYNC_COLUMNS = [
     "underlying_price_latest_at", "underlying_price_horizon", "contract_horizon_date",
     "underlying_price_peak", "underlying_peak_date", "vix_at_entry", "vix_at_exit",
     "price_window", "setup_entry", "chart_read_entry", "chart_read_exit",
+    "setup_structure", "setup_score", "setup_reasons", "setup_criteria",
+    "trade_grade", "grade_points", "grade_reasons",
     "trade_seq", "synced_at",
 ]
 
@@ -599,6 +601,122 @@ def hold_stats(closes: dict, entry_iso, exit_iso):
 
 
 # ---------------------------------------------------------------------------
+# Setup Score (static, technical, entry-only) + Trade Grade (post-mortem)
+# ---------------------------------------------------------------------------
+GRAVEYARD = {"SOFI", "GLXY", "AMC", "UNG", "BMNR", "AEVA", "QUBT"}  # display flag only, not scored
+
+
+def _pivots(seq, lr=3):
+    hi, lo = [], []
+    for i in range(lr, len(seq) - lr):
+        w = seq[i - lr:i + lr + 1]
+        if seq[i] == max(w):
+            hi.append(seq[i])
+        if seq[i] == min(w):
+            lo.append(seq[i])
+    return hi, lo
+
+
+def pivot_structure(pw: list, entry_iso: str | None) -> str | None:
+    """HH/HL, LH/LL, flat, or mixed -- from the ~40 daily bars before entry."""
+    if not pw or not entry_iso:
+        return None
+    pre = [c for d, c in pw if d < entry_iso[:10]][-40:]
+    if len(pre) < 20:
+        return None
+    hi, lo = _pivots(pre)
+    if len(hi) < 2 or len(lo) < 2:
+        return "flat"
+    if hi[-1] > hi[-2] and lo[-1] > lo[-2]:
+        return "HH/HL"
+    if hi[-1] < hi[-2] and lo[-1] < lo[-2]:
+        return "LH/LL"
+    return "mixed"
+
+
+def setup_score(f: dict | None, structure: str | None, is_put: bool):
+    """
+    Static technical score of the entry, outcome-independent. Returns
+    (score:int, reasons:list[str], criteria:dict).
+    Demo v1 factors: pivot structure, not-extended, range position.
+    """
+    if not f:
+        return None, [], {}
+    s, why, crit = 0, [], {}
+
+    # 1. trend structure (inverted for puts)
+    good = "LH/LL" if is_put else "HH/HL"
+    bad = "HH/HL" if is_put else "LH/LL"
+    if structure == good:
+        s += 3; why.append(f"{good} structure +3")
+    elif structure == bad:
+        s -= 3; why.append(f"{bad} structure (wrong way) -3")
+    elif structure == "flat":
+        why.append("flat structure 0")
+    else:
+        s -= 1; why.append("choppy / mixed structure -1")
+    crit["structure"] = structure
+
+    # 2. not extended
+    r20 = f.get("ret20")
+    stretch = (f["px"] / f["sma20"] - 1) * 100 if f.get("sma20") else 0
+    extended = (r20 is not None and abs(r20) > 35) or abs(stretch) > 22
+    if extended:
+        s -= 2; why.append(f"extended ({stretch:+.0f}% vs 20-day) -2")
+        crit["not_extended"] = False
+    else:
+        s += 2; why.append("not extended +2")
+        crit["not_extended"] = True
+
+    # 3. range position (room to run)
+    poR = f.get("pct_of_range", 50)
+    poR = 100 - poR if is_put else poR
+    if 25 <= poR <= 88:
+        s += 1; why.append("room in the range +1")
+        crit["range_ok"] = True
+    elif poR > 95:
+        s -= 1; why.append("buying the extreme -1")
+        crit["range_ok"] = False
+    else:
+        crit["range_ok"] = poR >= 12
+
+    tier = "strong" if s >= 4 else "ok" if s >= 1 else "weak"
+    return s, why, {**crit, "tier": tier}
+
+
+def trade_grade(f_in, strike, is_put, entry_iso, expiry_iso, days_held, pnl, ifheld_pct):
+    """Post-mortem: contract fit + hold discipline + outcome. No ticker history."""
+    s, why = 0, []
+    if strike is not None and f_in and f_in.get("px"):
+        m = (strike / f_in["px"] - 1) * 100
+        if is_put:
+            m = -m
+        if m <= 5:
+            s += 2; why.append("ATM/ITM strike +2")
+        elif m > 15:
+            s -= 2; why.append("deep-OTM strike -2")
+    dte = _days_between(entry_iso, expiry_iso)
+    if dte is not None:
+        if 46 <= dte <= 90:
+            s += 1; why.append("46-90 DTE +1")
+        elif 21 <= dte < 46 or dte > 90:
+            s -= 1; why.append("DTE off (theta / LEAP) -1")
+    if days_held is not None:
+        if days_held >= 2:
+            s += 3; why.append("held >=2 days +3")
+        else:
+            s -= 4; why.append("flipped <2 days -4")
+        if days_held > 21:
+            s -= 1; why.append("held >21 days (hoping) -1")
+    if pnl is not None and pnl > 0:
+        s += 2; why.append("closed green +2")
+    if pnl is not None and pnl < 0 and ifheld_pct is not None and ifheld_pct >= 15:
+        s -= 1; why.append("cut a would-be winner -1")
+    g = "A" if s >= 6 else "B" if s >= 3 else "C" if s >= 0 else "D"
+    return g, s, why
+
+
+# ---------------------------------------------------------------------------
 # pipeline output -> Supabase rows
 # ---------------------------------------------------------------------------
 def _num(v):
@@ -628,6 +746,13 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict, vix: dict) 
     u_hz = close_on_or_before(closes, hz_iso) if exit_iso else None
     ifheld = (((-1 if is_put else 1) * (u_hz - u_ex) / u_ex * 100)
               if (u_ex and u_hz) else None)
+
+    pw = price_window(closes, entry_iso, exit_iso)
+    structure = pivot_structure(pw, entry_iso)
+    ss, ss_why, ss_crit = setup_score(f_in, structure, is_put)
+    tg, tg_pts, tg_why = trade_grade(f_in, c.get("strike"), is_put, entry_iso,
+                                     _iso_date(c.get("expiry")), t.get("days_held"),
+                                     t.get("pnl"), ifheld)
 
     return {
         "id": t["id"],
@@ -660,12 +785,19 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict, vix: dict) 
         "underlying_peak_date": peak_d,
         "vix_at_entry": close_on_or_before(vix, t.get("entry_time")),
         "vix_at_exit": close_on_or_before(vix, t.get("exit_time")),
-        "price_window": price_window(closes, entry_iso, exit_iso) or None,
+        "price_window": pw or None,
         "setup_entry": setup,
         "chart_read_entry": entry_read(t["sym"], f_in, setup, c.get("strike"),
                                        c.get("putCall"), _iso_date(c.get("expiry")), entry_iso),
         "chart_read_exit": exit_read(t["sym"], f_out, up_d, held_n, after_rows,
                                      exit_iso, ifheld, is_put),
+        "setup_structure": structure,
+        "setup_score": ss,
+        "setup_reasons": "; ".join(ss_why) or None,
+        "setup_criteria": ss_crit or None,
+        "trade_grade": tg,
+        "grade_points": tg_pts,
+        "grade_reasons": "; ".join(tg_why) or None,
         "trade_seq": t.get("_seq"),
         "synced_at": now_iso,
     }

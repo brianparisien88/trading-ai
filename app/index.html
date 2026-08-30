@@ -243,6 +243,16 @@ function fmtVerdict(v){
   const cls = v >= 5 ? 'pos' : v <= -5 ? 'neg' : '';
   return cls ? `<span class="${cls}">${txt}</span>` : `<span style="color:var(--muted)">${txt}</span>`;
 }
+function fmtGrade(g){
+  if(!g) return '<span style="color:var(--dim)">—</span>';
+  const c = g==='A' ? 'var(--green)' : g==='B' ? 'var(--muted)' : g==='C' ? 'var(--amber)' : 'var(--red)';
+  return `<span style="color:${c};font-weight:600;">${g}</span>`;
+}
+function fmtSetup(s, tier){
+  if(s == null) return '<span style="color:var(--dim)">—</span>';
+  const c = tier==='strong' ? 'var(--green)' : tier==='ok' ? 'var(--muted)' : 'var(--red)';
+  return `<span style="color:${c}">${s>=0?'+':''}${s}</span>`;
+}
 function showBanner(msg){ const b=document.getElementById('banner'); b.textContent=msg; b.classList.add('show'); }
 function hideBanner(){ document.getElementById('banner').classList.remove('show'); }
 function latestSync(rows){
@@ -312,6 +322,13 @@ function mapClosed(r){
     setup_entry: r.setup_entry,
     chart_read_entry: r.chart_read_entry,
     chart_read_exit: r.chart_read_exit,
+    setup_structure: r.setup_structure,
+    setup_score: r.setup_score,
+    setup_reasons: r.setup_reasons,
+    setup_tier: r.setup_criteria && r.setup_criteria.tier,
+    trade_grade: r.trade_grade,
+    grade_points: r.grade_points,
+    grade_reasons: r.grade_reasons,
     // journal fields live on the row itself now
     strategy: r.strategy || '',
     journal_thoughts: r.journal_thoughts || '',
@@ -332,6 +349,7 @@ async function loadData(){
       'contract_description,underlying_price_entry,underlying_price_exit,underlying_price_latest,' +
       'underlying_price_latest_at,underlying_price_horizon,contract_horizon_date,underlying_price_peak,' +
       'underlying_peak_date,vix_at_entry,vix_at_exit,setup_entry,chart_read_entry,chart_read_exit,' +
+      'setup_structure,setup_score,setup_reasons,setup_criteria,trade_grade,grade_points,grade_reasons,' +
       'trade_seq,synced_at,strategy,journal_thoughts,planned_stop,planned_target'),
     db.from('account_summary').select('*').eq('id', 'current').maybeSingle(),
   ]);
@@ -487,6 +505,8 @@ const CLOSED_COLS = [
   {key:'exit_time', label:'Date Closed'},
   {key:'entry_time', label:'Date Opened'},
   {key:'sym', label:'Ticker'},
+  {key:'trade_grade', label:'Grade'},
+  {key:'setup_score', label:'Setup'},
   {key:'days_held', label:'Days Held', hide:true},
   {key:'contract_cost', label:'Cost', hide:true},
   {key:'pnl', label:'P&L'},
@@ -669,8 +689,19 @@ function contextBlock(t){
     ${seLine}
     ${pkLine}
     ${t.vix_entry!=null ? `<div><span>VIX</span> ${Number(t.vix_entry).toFixed(1)} <span style="color:var(--dim)">at entry</span>${t.vix_exit!=null?` &rarr; ${Number(t.vix_exit).toFixed(1)} <span style="color:var(--dim)">at exit</span>`:''}</div>` : ''}
+    ${t.setup_score!=null ? `<div><span>Setup score</span> ${fmtSetup(t.setup_score,t.setup_tier)} <span style="color:var(--dim)">${t.setup_reasons||''}</span></div>` : ''}
+    ${t.trade_grade ? `<div><span>Trade grade</span> ${fmtGrade(t.trade_grade)} <span style="color:var(--dim)">${t.grade_reasons||''}</span></div>` : ''}
+    ${tickerRecord(t.sym, t.id)}
     <div><span>Trade #</span> ${t.trade_seq ?? '—'} of ${CLOSED_RAW.length}</div>
   </div>`;
+}
+function tickerRecord(sym, thisId){
+  const g = CLOSED_RAW.filter(x=>x.sym===sym);
+  if(g.length < 2) return '';
+  const w = g.filter(x=>x.pnl>0).length, l = g.filter(x=>x.pnl<0).length;
+  const net = g.reduce((a,x)=>a+x.pnl,0);
+  const cls = net>=0 ? 'pos' : 'neg';
+  return `<div><span>Your record</span> ${w}W / ${l}L on ${sym} <span class="${cls}">(${net>=0?'+':'-'}$${Math.abs(net).toFixed(0)})</span> <span style="color:var(--dim)">— info only, not scored</span></div>`;
 }
 
 function miniChart(t){
@@ -809,6 +840,8 @@ function renderRowsClosed(){
       <td class="mono">${fmtDateShort(t.exit_time)}</td>
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
       <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''}${t.recovered?` <span class="badge rec" title="closed at a loss, then ran +${Math.round(t.peak_move)}% before expiry">rec</span>`:''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
+      <td>${fmtGrade(t.trade_grade)}</td>
+      <td class="mono">${fmtSetup(t.setup_score, t.setup_tier)}</td>
       <td class="mono col-hide">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
       <td class="mono col-hide" style="color:var(--muted)">${t.contract_cost!=null ? fmt(t.contract_cost) : '—'}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
