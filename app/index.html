@@ -150,7 +150,7 @@
       <tbody id="rowsClosed"></tbody>
     </table>
     <div class="more" id="loadMore" style="display:none;">Show more</div>
-    <div class="data-note"><strong>If Held</strong> = how far the underlying moved <em>in the trade's direction</em> between your exit and <em>that contract's own expiry</em> (or today, if it hasn't expired) — calls: up is favourable; puts: down. Not measured to "today" regardless of how long ago the contract died. <strong>Verdict</strong>: <span class="pos">Should've held</span> ≥ +5%, <span class="neg">Right to exit</span> ≤ −5%, About even between. Expand a row for the peak favourable point within that window. <span class="badge rec">rec</span> = closed at a loss, then the underlying ran ≥ +15% in your favour before the contract expired (a probably-too-tight stop) — tick <em>Recovered cuts</em> to isolate them. Daily closes from Yahoo Finance — directional proxy, not an options P&amp;L simulation. <strong>Entry VIX</strong> is the ^VIX close on the day you opened the trade (<span style="color:var(--amber)">≥ 22</span> elevated, <span style="color:var(--dim)">&lt; 15</span> calm). Rows flagged <span class="badge warn">check</span> were paired against more than one open lot.</div>
+    <div class="data-note"><strong>If Held</strong> = how far the underlying moved <em>in the trade's direction</em> between your exit and <em>that contract's own expiry</em> (or today, if it hasn't expired) — calls: up is favourable; puts: down. Not measured to "today" regardless of how long ago the contract died. <strong>Verdict</strong>: <span class="pos">Should've held</span> ≥ +5%, <span class="neg">Right to exit</span> ≤ −5%, About even between. Expand a row for the peak favourable point within that window. <span class="badge rec">rec</span> = closed at a loss, then the underlying ran ≥ +15% in your favour before the contract expired (a probably-too-tight stop) — tick <em>Recovered cuts</em> to isolate them. Daily closes from Yahoo Finance — directional proxy, not an options P&amp;L simulation. Entry / exit VIX shown in the expand panel. Rows flagged <span class="badge warn">check</span> were paired against more than one open lot.</div>
   </div>
 </div>
 
@@ -478,7 +478,6 @@ const CLOSED_COLS = [
   {key:'sym', label:'Ticker'},
   {key:'days_held', label:'Days Held', hide:true},
   {key:'contract_cost', label:'Cost', hide:true},
-  {key:'vix_entry', label:'Entry VIX', hide:true},
   {key:'pnl', label:'P&L'},
   {key:'return_pct', label:'Return %', hide:true},
   {key:'since_exit', label:'If Held'},
@@ -758,7 +757,6 @@ function renderRowsClosed(){
       <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''}${t.recovered?` <span class="badge rec" title="closed at a loss, then ran +${Math.round(t.peak_move)}% before expiry">rec</span>`:''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
       <td class="mono col-hide">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
       <td class="mono col-hide" style="color:var(--muted)">${t.contract_cost!=null ? fmt(t.contract_cost) : '—'}</td>
-      <td class="mono col-hide">${fmtVix(t.vix_entry)}</td>
       <td class="mono ${t.pnl>0?'pos':t.pnl<0?'neg':''}">${fmt(t.pnl)}</td>
       <td class="mono col-hide">${fmtReturn(t.return_pct)}</td>
       <td class="mono">${fmtSinceExit(t.since_exit)}</td>
