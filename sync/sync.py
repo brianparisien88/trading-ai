@@ -538,31 +538,38 @@ def entry_read(sym, f, setup, strike, put_call, expiry_iso, entry_iso) -> str | 
     return " ".join(parts)
 
 
-def exit_read(sym, f_exit, held_days, up_days, held_n, after_rows, exit_iso, ifheld_pct) -> str | None:
+def exit_read(sym, f_exit, up_days, held_n, after_rows, exit_iso, ifheld_pct, is_put=False) -> str | None:
     if not f_exit:
         return None
-    move = None
-    if f_exit["px"] and held_n and after_rows:
-        pass
     parts = [f"{_mmdd(exit_iso)} — {sym} ${f_exit['px']:.2f}."]
     if held_n and held_n <= 2:
         parts.append("Same-day / next-day exit.")
     elif held_n:
         parts.append(f"Closed higher {up_days} of the {held_n} days held.")
-    trend = ("Extended above its 10-day average with the slope rising — exited into strength"
-             if f_exit["ma10_rising"] and f_exit["above20"]
-             else "Rolling over below its 20-day average — exited into weakness"
-             if not f_exit["above20"]
-             else "Chopping around its moving averages")
-    parts.append(trend + ".")
-    if after_rows:
-        base = after_rows[0][1]
-        hi = max(c for _, c in after_rows)
+    rising = f_exit["ma10_rising"] and f_exit["above20"]
+    falling = not f_exit["above20"]
+    thesis_working = (falling if is_put else rising)
+    if rising:
+        chart = "The stock was still climbing above its 10-day average"
+    elif falling:
+        chart = "The stock had rolled over below its 20-day average"
+    else:
+        chart = "The stock was chopping around its moving averages"
+    if held_n and held_n > 2:
+        chart += (" — your thesis was still playing out, so this reads as an early exit."
+                  if thesis_working else " — the trade was already going against you.")
+    else:
+        chart += "."
+    parts.append(chart)
+    if after_rows and f_exit.get("px"):
+        base = f_exit["px"]                       # the exit-day close = the baseline for "since exit"
+        favorable = min if is_put else max
+        ext = favorable(c for _, c in after_rows)
         last = after_rows[-1][1]
-        d_hi = round((hi / base - 1) * 100)
+        d_ext = round(((base - ext) / base if is_put else (ext - base) / base) * 100)
         parts.append(f"In the {len(after_rows)} trading days after exit it "
-                     + (f"ran to ${hi:.2f} (+{d_hi}%) then sat at ${last:.2f}." if d_hi >= 5
-                        else f"drifted to ${last:.2f}."))
+                     + (f"{'fell' if is_put else 'ran'} to ${ext:.2f} ({'+' if d_ext>=0 else ''}{d_ext}% your way), last ${last:.2f}." if d_ext >= 5
+                        else f"went nowhere (last ${last:.2f})."))
     if ifheld_pct is not None:
         parts.append("Verdict: premature exit." if ifheld_pct >= 5
                      else "Verdict: exiting was right." if ifheld_pct <= -5
@@ -657,8 +664,8 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict, vix: dict) 
         "setup_entry": setup,
         "chart_read_entry": entry_read(t["sym"], f_in, setup, c.get("strike"),
                                        c.get("putCall"), _iso_date(c.get("expiry")), entry_iso),
-        "chart_read_exit": exit_read(t["sym"], f_out, t.get("days_held"), up_d, held_n,
-                                     after_rows, exit_iso, ifheld),
+        "chart_read_exit": exit_read(t["sym"], f_out, up_d, held_n, after_rows,
+                                     exit_iso, ifheld, is_put),
         "trade_seq": t.get("_seq"),
         "synced_at": now_iso,
     }
