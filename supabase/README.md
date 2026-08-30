@@ -20,6 +20,10 @@ Schema for the trade journal. Two tables, per [`docs/supabase_schema_draft.md`](
 
 ## Edge functions
 
+| `migrations/20260830210000_open_positions_journal.sql` | Journal columns + `entry_order_id` + authenticated write policy on `open_positions` (journal a trade before it closes; sync carries notes onto the closed row). |
+
+## Edge functions
+
 | `functions/analyze-setup/` | Live Setup Score for a prospective trade. `POST {ticker, side}` → fetches Yahoo (server-side), returns score + pass/fail criteria + contract band. `verify_jwt: false`, no DB, no secrets. Called by the dashboard's Analyze tab. |
 
 ## Applying the initial migration
