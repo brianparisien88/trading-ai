@@ -922,16 +922,21 @@ def main() -> None:
 
     sb = Supabase(supabase_url, secret_key)
 
-    # journal notes currently on open positions -> carry to the round-trip when it closes
-    open_notes = {}  # entry_order_id -> {strategy, journal_thoughts, planned_stop, planned_target}
+    # journal notes currently on open positions -> carry to the round-trip when
+    # it closes. Keyed by entry_order_id (when Flex provides it) and, as a
+    # fallback, by "symbol|contract_description" (the specific option contract).
+    open_notes = {}
+    JCOLS = ("strategy", "journal_thoughts", "planned_stop", "planned_target")
     try:
-        cur = sb.get("open_positions", "entry_order_id,strategy,journal_thoughts,planned_stop,planned_target")
+        cur = sb.get("open_positions", "entry_order_id,symbol,contract_description," + ",".join(JCOLS))
         for r in cur:
-            oid = r.get("entry_order_id")
-            if oid and any(r.get(k) is not None for k in
-                           ("strategy", "journal_thoughts", "planned_stop", "planned_target")):
-                open_notes[oid] = {k: r.get(k) for k in
-                                   ("strategy", "journal_thoughts", "planned_stop", "planned_target")}
+            if not any(r.get(k) is not None for k in JCOLS):
+                continue
+            note = {k: r.get(k) for k in JCOLS}
+            if r.get("entry_order_id"):
+                open_notes[r["entry_order_id"]] = note
+            if r.get("symbol") and r.get("contract_description"):
+                open_notes[f"{r['symbol']}|{r['contract_description']}"] = note
     except Exception as e:  # noqa: BLE001
         log(f"  (could not read open-position notes: {e})")
 
@@ -954,7 +959,8 @@ def main() -> None:
     carried = 0
     for t in closed:
         row = closed_row(t, now_iso, contracts, prices, vix)
-        note = open_notes.get(t.get("entry_order"))
+        note = (open_notes.get(t.get("entry_order"))
+                or open_notes.get(f"{row['symbol']}|{row.get('contract_description')}"))
         if note:
             row.update({k: v for k, v in note.items() if v is not None})
             carried += 1
