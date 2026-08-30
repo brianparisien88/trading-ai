@@ -60,6 +60,7 @@ CLOSED_SYNC_COLUMNS = [
     "underlying_price_entry", "underlying_price_exit", "underlying_price_latest",
     "underlying_price_latest_at", "underlying_price_horizon", "contract_horizon_date",
     "underlying_price_peak", "underlying_peak_date", "vix_at_entry", "vix_at_exit",
+    "price_window", "setup_entry", "chart_read_entry", "chart_read_exit",
     "trade_seq", "synced_at",
 ]
 
@@ -412,6 +413,185 @@ def horizon_date(expiry: str | None, exit_iso: str | None) -> "datetime.date":
 
 
 # ---------------------------------------------------------------------------
+# Chart window + trend read
+# ---------------------------------------------------------------------------
+CHART_WINDOW_DAYS = 45  # trading days shown before entry and after exit
+
+
+def _sorted_closes(closes: dict):
+    return sorted(closes.items())  # [(iso_date, px), ...] chronological
+
+
+def price_window(closes: dict, entry_iso: str | None, exit_iso: str | None) -> list:
+    """[[date, close], ...] for ~CHART_WINDOW_DAYS trading days each side of the trade."""
+    if not closes or not entry_iso:
+        return []
+    rows = _sorted_closes(closes)
+    dates = [d for d, _ in rows]
+    def idx_on_or_after(iso):
+        for i, d in enumerate(dates):
+            if d >= iso[:10]:
+                return i
+        return len(dates) - 1
+    i_in = idx_on_or_after(entry_iso)
+    i_out = idx_on_or_after(exit_iso) if exit_iso else i_in
+    lo = max(0, i_in - CHART_WINDOW_DAYS)
+    hi = min(len(rows), i_out + CHART_WINDOW_DAYS + 1)
+    return [[d, c] for d, c in rows[lo:hi]]
+
+
+def _sma(rows, i, k):
+    seg = rows[max(0, i - k + 1):i + 1]
+    return sum(c for _, c in seg) / len(seg) if seg else None
+
+
+def trend_features(closes: dict, on_iso: str | None) -> dict | None:
+    """Trend snapshot as of `on_iso` (or the closest prior trading day)."""
+    if not closes or not on_iso:
+        return None
+    rows = _sorted_closes(closes)
+    target = on_iso[:10]
+    i = None
+    for j, (d, _) in enumerate(rows):
+        if d <= target:
+            i = j
+        else:
+            break
+    if i is None or i < 5:
+        return None
+    px = rows[i][1]
+    sma20 = _sma(rows, i, 20)
+    sma50 = _sma(rows, i, 50)
+    sma10_now, sma10_prev = _sma(rows, i, 10), _sma(rows, max(0, i - 3), 10)
+    look = rows[max(0, i - 63):i + 1]  # ~3 months
+    lo3 = min(c for _, c in look)
+    hi3 = max(c for _, c in look)
+    ret5 = (px / rows[i - 5][1] - 1) * 100 if i >= 5 else None
+    ret20 = (px / rows[i - 20][1] - 1) * 100 if i >= 20 else None
+    return {
+        "px": round(px, 2),
+        "sma20": round(sma20, 2) if sma20 else None,
+        "sma50": round(sma50, 2) if sma50 else None,
+        "above20": sma20 is not None and px > sma20,
+        "above50": sma50 is not None and px > sma50,
+        "ma10_rising": sma10_now is not None and sma10_prev is not None and sma10_now > sma10_prev,
+        "ret5": round(ret5, 1) if ret5 is not None else None,
+        "ret20": round(ret20, 1) if ret20 is not None else None,
+        "pct_of_range": round((px - lo3) / (hi3 - lo3) * 100) if hi3 > lo3 else 50,
+        "pct_off_low": round((px / lo3 - 1) * 100),
+        "crossed_up_20": (rows[max(0, i - 4)][1] < (_sma(rows, max(0, i - 4), 20) or 0)
+                          and sma20 is not None and px > sma20),
+    }
+
+
+def classify_setup(f: dict | None) -> str | None:
+    if not f:
+        return None
+    r20 = f.get("ret20") or 0
+    if f["above20"] and f["above50"] and r20 >= 25:
+        return "extended"
+    if f["above20"] and f["above50"] and f["pct_of_range"] >= 70:
+        return "momentum breakout"
+    if f.get("crossed_up_20") or (f["ma10_rising"] and not f["above50"] and f["pct_off_low"] >= 8):
+        return "early reversal / base reclaim"
+    if not f["above20"] and not f["above50"] and r20 <= -8:
+        return "falling knife"
+    return "range / no trend"
+
+
+def _mmdd(iso):
+    try:
+        return datetime.strptime(iso[:10], "%Y-%m-%d").strftime("%b %-d")
+    except (TypeError, ValueError):
+        return iso[:10] if iso else "?"
+
+
+def entry_read(sym, f, setup, strike, put_call, expiry_iso, entry_iso) -> str | None:
+    if not f:
+        return None
+    parts = [f"{_mmdd(entry_iso)} — {sym} ${f['px']:.2f}."]
+    if f.get("ret20") is not None:
+        d = "up" if f["ret20"] >= 0 else "down"
+        parts.append(f"{d.capitalize()} {abs(f['ret20'])}% over 20 days"
+                     + (f" (+{f['pct_off_low']}% off the recent low)" if f["pct_off_low"] >= 8 else "") + ".")
+    if f.get("crossed_up_20") and f["sma20"] is not None:
+        parts.append(f"Just reclaimed its 20-day average (${f['sma20']:.2f})"
+                     + (", and back above its 50-day." if f["above50"]
+                        else ", still below its 50-day."))
+    elif f["sma20"] is not None:
+        p = ("Above" if f["above20"] else "Below") + f" its 20-day (${f['sma20']:.2f})"
+        if f["sma50"] is not None:
+            p += ", " + ("above" if f["above50"] else "below") + " its 50-day"
+        parts.append(p + ".")
+    poR = f["pct_of_range"]
+    parts.append(("Near the top of its 3-month range." if poR >= 70
+                  else "Near the bottom of its 3-month range." if poR <= 30
+                  else "Mid-range."))
+    if setup:
+        parts.append(f"Setup: {setup}.")
+    if strike is not None and f["px"]:
+        moneyness = (strike / f["px"] - 1) * 100
+        side = "OTM" if (moneyness > 0) == (put_call != "P") else "ITM"
+        dte = _days_between(entry_iso, expiry_iso)
+        parts.append(f"Contract {abs(round(moneyness))}% {side}"
+                     + (f", {dte} days to expiry." if dte else "."))
+    return " ".join(parts)
+
+
+def exit_read(sym, f_exit, held_days, up_days, held_n, after_rows, exit_iso, ifheld_pct) -> str | None:
+    if not f_exit:
+        return None
+    move = None
+    if f_exit["px"] and held_n and after_rows:
+        pass
+    parts = [f"{_mmdd(exit_iso)} — {sym} ${f_exit['px']:.2f}."]
+    if held_n and held_n <= 2:
+        parts.append("Same-day / next-day exit.")
+    elif held_n:
+        parts.append(f"Closed higher {up_days} of the {held_n} days held.")
+    trend = ("Extended above its 10-day average with the slope rising — exited into strength"
+             if f_exit["ma10_rising"] and f_exit["above20"]
+             else "Rolling over below its 20-day average — exited into weakness"
+             if not f_exit["above20"]
+             else "Chopping around its moving averages")
+    parts.append(trend + ".")
+    if after_rows:
+        base = after_rows[0][1]
+        hi = max(c for _, c in after_rows)
+        last = after_rows[-1][1]
+        d_hi = round((hi / base - 1) * 100)
+        parts.append(f"In the {len(after_rows)} trading days after exit it "
+                     + (f"ran to ${hi:.2f} (+{d_hi}%) then sat at ${last:.2f}." if d_hi >= 5
+                        else f"drifted to ${last:.2f}."))
+    if ifheld_pct is not None:
+        parts.append("Verdict: premature exit." if ifheld_pct >= 5
+                     else "Verdict: exiting was right." if ifheld_pct <= -5
+                     else "Verdict: about even.")
+    return " ".join(parts)
+
+
+def _days_between(a_iso, b_iso):
+    try:
+        a = datetime.strptime(a_iso[:10], "%Y-%m-%d").date()
+        b = datetime.strptime(b_iso[:10], "%Y-%m-%d").date()
+        return (b - a).days
+    except (TypeError, ValueError):
+        return None
+
+
+def hold_stats(closes: dict, entry_iso, exit_iso):
+    """(up_days, held_n, after_rows) -- after_rows = closes strictly after exit, capped at CHART_WINDOW_DAYS."""
+    if not closes or not entry_iso or not exit_iso:
+        return 0, 0, []
+    rows = _sorted_closes(closes)
+    e0, e1 = entry_iso[:10], exit_iso[:10]
+    held = [(d, c) for d, c in rows if e0 <= d <= e1]
+    up = sum(1 for k in range(1, len(held)) if held[k][1] > held[k - 1][1])
+    after = [(d, c) for d, c in rows if d > e1][:CHART_WINDOW_DAYS]
+    return up, len(held), after
+
+
+# ---------------------------------------------------------------------------
 # pipeline output -> Supabase rows
 # ---------------------------------------------------------------------------
 def _num(v):
@@ -430,6 +610,17 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict, vix: dict) 
     hz_iso = hz.isoformat()
     is_put = c.get("putCall") == "P"
     peak_p, peak_d = favorable_extreme(closes, (t.get("exit_time") or hz_iso), hz_iso, is_put)
+
+    # chart window + templated trend reads
+    entry_iso, exit_iso = t.get("entry_time"), t.get("exit_time")
+    f_in = trend_features(closes, entry_iso)
+    f_out = trend_features(closes, exit_iso)
+    setup = classify_setup(f_in)
+    up_d, held_n, after_rows = hold_stats(closes, entry_iso, exit_iso)
+    u_ex = close_on_or_before(closes, exit_iso)
+    u_hz = close_on_or_before(closes, hz_iso) if exit_iso else None
+    ifheld = (((-1 if is_put else 1) * (u_hz - u_ex) / u_ex * 100)
+              if (u_ex and u_hz) else None)
 
     return {
         "id": t["id"],
@@ -462,6 +653,12 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict, vix: dict) 
         "underlying_peak_date": peak_d,
         "vix_at_entry": close_on_or_before(vix, t.get("entry_time")),
         "vix_at_exit": close_on_or_before(vix, t.get("exit_time")),
+        "price_window": price_window(closes, entry_iso, exit_iso) or None,
+        "setup_entry": setup,
+        "chart_read_entry": entry_read(t["sym"], f_in, setup, c.get("strike"),
+                                       c.get("putCall"), _iso_date(c.get("expiry")), entry_iso),
+        "chart_read_exit": exit_read(t["sym"], f_out, t.get("days_held"), up_d, held_n,
+                                     after_rows, exit_iso, ifheld),
         "trade_seq": t.get("_seq"),
         "synced_at": now_iso,
     }

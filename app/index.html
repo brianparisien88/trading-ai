@@ -308,6 +308,10 @@ function mapClosed(r){
     peak_move: peakPct(r),                       // best favourable move within that window
     verdict: sinceExitPct(r),                    // same number; rendered as a word (sorts numerically)
     recovered: (Number(r.pnl) < 0) && (peakPct(r) != null) && (peakPct(r) >= RECOVERED_PEAK),
+    price_window: r.price_window,
+    setup_entry: r.setup_entry,
+    chart_read_entry: r.chart_read_entry,
+    chart_read_exit: r.chart_read_exit,
     // journal fields live on the row itself now
     strategy: r.strategy || '',
     journal_thoughts: r.journal_thoughts || '',
@@ -321,7 +325,14 @@ async function loadData(){
   hideBanner();
   const [openRes, closedRes, acctRes] = await Promise.all([
     db.from('open_positions').select('*'),
-    db.from('closed_trades').select('*'),
+    // price_window is bulky and only needed on row-expand — fetched lazily then
+    db.from('closed_trades').select(
+      'id,symbol,entry_time,entry_price,exit_time,exit_price,size,pnl,commission,cost_basis,' +
+      'return_pct,days_held,ambiguous,ambiguous_reason,contract_expiry,contract_type,contract_strike,' +
+      'contract_description,underlying_price_entry,underlying_price_exit,underlying_price_latest,' +
+      'underlying_price_latest_at,underlying_price_horizon,contract_horizon_date,underlying_price_peak,' +
+      'underlying_peak_date,vix_at_entry,vix_at_exit,setup_entry,chart_read_entry,chart_read_exit,' +
+      'trade_seq,synced_at,strategy,journal_thoughts,planned_stop,planned_target'),
     db.from('account_summary').select('*').eq('id', 'current').maybeSingle(),
   ]);
   if(openRes.error)   throw new Error('open_positions: ' + openRes.error.message);
@@ -624,7 +635,13 @@ async function toggleRow(id){
   if(isOpen){ rowEl.classList.remove('open'); openRowsState[id]=false; return; }
   rowEl.classList.add('open'); openRowsState[id]=true;
   const t = CLOSED_RAW.find(x=>x.id===id);
-  renderBody(id, t && t.ambiguous ? ('Flagged: ' + t.reason + '. Verify against your broker before trusting this P&L split.') : null);
+  const note = t && t.ambiguous ? ('Flagged: ' + t.reason + '. Verify against your broker before trusting this P&L split.') : null;
+  renderBody(id, note);
+  if(t && t.price_window === undefined){       // lazy-fetch the chart window once
+    t.price_window = null;
+    const { data } = await db.from('closed_trades').select('price_window').eq('id', id).maybeSingle();
+    if(data){ t.price_window = data.price_window; if(openRowsState[id]) renderBody(id, note); }
+  }
 }
 window.toggleRow = toggleRow;
 
@@ -656,6 +673,42 @@ function contextBlock(t){
   </div>`;
 }
 
+function miniChart(t){
+  const w = Array.isArray(t.price_window) ? t.price_window : null;
+  if(!w || w.length < 10) return '';
+  const W=620, H=170, padL=34, padR=8, padT=10, padB=18, n=w.length;
+  const vals = w.map(p=>p[1]);
+  let mn=Math.floor(Math.min(...vals)-0.5), mx=Math.ceil(Math.max(...vals)+0.5);
+  const X = i => padL + (W-padL-padR)*i/(n-1);
+  const Y = v => padT + (H-padT-padB)*(1 - (v-mn)/(mx-mn));
+  const sma = (i,k)=>{ const s=w.slice(Math.max(0,i-k+1),i+1); return s.reduce((a,p)=>a+p[1],0)/s.length; };
+  const idxOnAfter = iso => { if(!iso) return -1; const d=iso.slice(0,10); for(let i=0;i<n;i++) if(w[i][0]>=d) return i; return n-1; };
+  const iIn = idxOnAfter(t.entry_time), iOut = idxOnAfter(t.exit_time);
+  const i15 = (iOut>=0 && iOut+15 < n) ? iOut+15 : -1;
+  let price='', mline='';
+  for(let i=0;i<n;i++){ price += (i?'L':'M')+X(i).toFixed(1)+','+Y(vals[i]).toFixed(1)+' '; }
+  for(let i=0;i<n;i++){ mline += (i?'L':'M')+X(i).toFixed(1)+','+Y(sma(i,20)).toFixed(1)+' '; }
+  let gy=''; const step=Math.max(1,Math.ceil((mx-mn)/4));
+  for(let g=mn; g<=mx; g+=step){ gy += `<line x1="${padL}" x2="${W-padR}" y1="${Y(g)}" y2="${Y(g)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-5}" y="${Y(g)+3}" text-anchor="end" font-size="9" fill="var(--dim)">$${g}</text>`; }
+  const vmark = (i,c) => i<0?'':`<line x1="${X(i)}" x2="${X(i)}" y1="${padT}" y2="${H-padB}" stroke="${c}" stroke-width="1" stroke-dasharray="2,2" opacity="0.55"/>`;
+  const held = (iIn>=0&&iOut>=0) ? `<rect x="${X(iIn)}" y="${padT}" width="${Math.max(0,X(iOut)-X(iIn))}" height="${H-padT-padB}" fill="var(--blue)" opacity="0.07"/>` : '';
+  const dot = (i,c,lbl) => i<0?'':`<circle cx="${X(i)}" cy="${Y(vals[i])}" r="3.5" fill="${c}"/>${lbl?`<text x="${X(i)}" y="${Y(vals[i])-8}" text-anchor="${i>n-8?'end':'middle'}" font-size="9" fill="${c}">${lbl} $${vals[i].toFixed(2)}</text>`:''}`;
+  return `<div class="context" style="line-height:1.3;">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${t.sym} price around the trade, entry to exit +15 days">
+      ${gy}${held}${vmark(iIn,'var(--green)')}${vmark(iOut,'var(--blue)')}
+      <path d="${mline}" fill="none" stroke="var(--dim)" stroke-width="1.1"/>
+      <path d="${price}" fill="none" stroke="var(--text)" stroke-width="1.5" stroke-linejoin="round"/>
+      ${dot(iIn,'var(--green)','in')}${dot(iOut,'var(--blue)','out')}${dot(i15,'var(--amber)','+15d')}
+    </svg>
+    <div style="display:flex;gap:14px;font-size:10px;color:var(--dim);margin-top:4px;flex-wrap:wrap;">
+      <span style="color:var(--muted)">close</span><span>20-day avg</span>
+      <span style="color:var(--green)">● entry</span><span style="color:var(--blue)">● exit</span><span style="color:var(--amber)">● exit +15 trading days</span>
+    </div>
+    ${t.chart_read_entry ? `<div style="margin-top:10px;"><span>Read — entry</span> ${t.chart_read_entry}</div>` : ''}
+    ${t.chart_read_exit ? `<div style="margin-top:6px;"><span>Read — exit</span> ${t.chart_read_exit}</div>` : ''}
+  </div>`;
+}
+
 function renderBody(id, ambNote){
   const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
   const cell = document.getElementById('cell-'+id);
@@ -668,6 +721,7 @@ function renderBody(id, ambNote){
   cell.innerHTML =
     (ambNote ? `<div class="flag-note">${ambNote}</div>` : '') +
     contextBlock(t) +
+    miniChart(t) +
     (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) + `
     <div class="field"><label>Strategy</label>
       <select data-field="strategy" data-id="${id}" ${dis}>${strategyOptionsHTML(j.strategy)}</select></div>
