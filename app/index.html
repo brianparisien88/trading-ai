@@ -118,6 +118,30 @@
   <div class="tabs">
     <div class="tab active" data-tab="open" onclick="switchTab('open')">Open Trades</div>
     <div class="tab" data-tab="closed" onclick="switchTab('closed')">Trade History</div>
+    <div class="tab" data-tab="analyze" onclick="switchTab('analyze')">Analyze a Trade</div>
+  </div>
+
+  <!-- ANALYZE TAB -->
+  <div class="panel" id="panel-analyze">
+    <div style="max-width:560px;">
+      <div class="field"><label>Ticker</label>
+        <input id="anTicker" placeholder="e.g. NVDA" style="width:140px; text-transform:uppercase; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; outline:none;">
+        <label class="chk" style="display:inline-flex; margin-left:14px;"><input type="radio" name="anSide" value="call" checked> call</label>
+        <label class="chk" style="display:inline-flex; margin-left:8px;"><input type="radio" name="anSide" value="put"> put</label>
+      </div>
+      <div class="field"><label>Setup strategy</label>
+        <select id="anStrategy" style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; outline:none;">
+          <option value="Default">Default — baseline technical check</option>
+        </select>
+        <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">Demo: only "Default" is wired — checks trend structure, not-extended, range position.</div>
+      </div>
+      <div class="field"><label>Thesis / journal note</label>
+        <textarea id="anThesis" placeholder="Why you're considering this trade..." style="width:100%; min-height:56px; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; resize:vertical; outline:none;"></textarea></div>
+      <button id="anRun" style="background:var(--blue); border:none; color:#fff; border-radius:6px; padding:9px 18px; font-size:13px; font-weight:500; cursor:pointer;">Analyze</button>
+      <span id="anMsg" style="font-size:12px; margin-left:10px; color:var(--muted);"></span>
+    </div>
+    <div id="anResult" style="margin-top:18px;"></div>
+    <div class="data-note">Live daily data from Yahoo via a Supabase edge function. Score is technical only — same factors used to backfill your closed trades' Setup Score. It does not know your thesis text (yet).</div>
   </div>
 
   <!-- OPEN TAB -->
@@ -369,12 +393,46 @@ async function loadData(){
   }
 }
 
+const ANALYZE_URL = SUPABASE_URL + '/functions/v1/analyze-setup';
+async function runAnalyze(){
+  const ticker = (document.getElementById('anTicker').value || '').trim().toUpperCase();
+  const side = document.querySelector('input[name="anSide"]:checked').value;
+  const msg = document.getElementById('anMsg'), out = document.getElementById('anResult');
+  if(!/^[A-Z.\-]{1,10}$/.test(ticker)){ msg.textContent = 'Enter a ticker.'; return; }
+  msg.textContent = 'Analyzing ' + ticker + '…'; out.innerHTML = '';
+  try{
+    const r = await fetch(ANALYZE_URL, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_PUBLISHABLE_KEY},
+      body: JSON.stringify({ ticker, side }) });
+    const d = await r.json();
+    if(d.error){ msg.textContent = 'Error: ' + d.error; return; }
+    msg.textContent = '';
+    const tierCol = d.tier==='strong'?'var(--green)':d.tier==='ok'?'var(--muted)':'var(--red)';
+    out.innerHTML = `<div class="context" style="max-width:560px;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+        <div><span class="sym" style="font-size:15px;">${d.ticker}</span> <span style="color:var(--dim); font-size:11px;">${d.name||''}</span></div>
+        <div class="mono" style="font-size:18px; color:${tierCol}; font-weight:600;">Setup ${d.score>=0?'+':''}${d.score} <span style="font-size:11px;">${d.tier}</span></div>
+      </div>
+      <div><span>Price</span> $${Number(d.price).toFixed(2)} <span style="color:var(--dim)">· 20-day $${d.s20} · 50-day $${d.s50} · +${d.ret20}% 20d · ${d.range_pct}% of range</span></div>
+      ${d.criteria.map(c=>`<div><span>${c.name}</span> <span class="${c.pass?'pos':'neg'}">${c.pass?'✓':'✗'}</span> ${c.detail}</div>`).join('')}
+      <div style="border-top:1px solid var(--border); margin-top:10px; padding-top:10px;">
+        <div><span>Suggested strike</span> ${d.recommended_contract.strike}</div>
+        <div><span>Suggested DTE</span> ${d.recommended_contract.dte}</div>
+        <div style="color:var(--dim); font-size:11px; margin-top:4px;">${d.recommended_contract.note}</div>
+      </div>
+      ${document.getElementById('anThesis').value.trim() ? `<div style="border-top:1px solid var(--border); margin-top:10px; padding-top:10px;"><span>Your thesis</span> ${document.getElementById('anThesis').value.trim().replace(/</g,'&lt;')}</div>` : ''}
+    </div>`;
+  }catch(e){ msg.textContent = 'Request failed: ' + e.message; }
+}
+
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
   document.getElementById('panel-open').classList.toggle('active', name==='open');
   document.getElementById('panel-closed').classList.toggle('active', name==='closed');
+  document.getElementById('panel-analyze').classList.toggle('active', name==='analyze');
 }
 window.switchTab = switchTab;
+document.getElementById('anRun').addEventListener('click', runAnalyze);
+document.getElementById('anTicker').addEventListener('keydown', e=>{ if(e.key==='Enter') runAnalyze(); });
 
 /* ============================================================================
    AUTH
