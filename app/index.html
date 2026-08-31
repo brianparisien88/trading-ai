@@ -183,7 +183,7 @@
       <tbody id="rowsOnchainTrades"></tbody>
     </table>
     <div class="more" id="loadMoreOnchain" style="display:none;">Show more</div>
-    <div class="data-note">Wallet activity from the <strong>Zerion API</strong>, refreshed on the daily sync. A <strong>round-trip trade</strong> pairs a buy of a token (from a stablecoin, ETH/BNB, or another token) against later sells, FIFO. A <strong>token→token</strong> swap closes one position and opens another at the swap's USD value. Partial sells leave the remainder as an open holding. LP, staking, bridging and airdrops are ignored; swaps that don't fit a round-trip are counted as <em>unmatched activity</em>. Prices are USD at block time per Zerion. Spam/worthless airdropped tokens are filtered out.</div>
+    <div class="data-note">Wallet activity from the <strong>Zerion API</strong>, refreshed on the daily sync. A <strong>round-trip trade</strong> pairs a buy of a token (from a stablecoin, ETH/BNB, or another token) against later sells, FIFO. A <strong>token→token</strong> swap closes one position and opens another at the swap's USD value. Partial sells leave the remainder as an open holding. LP, staking, bridging and airdrops are ignored; swaps that don't fit a round-trip are counted as <em>unmatched activity</em>. <strong>Realized P&amp;L</strong> = sum of the matched round-trips below; <strong>all-in</strong> is Zerion's figure which additionally includes gas, ETH/BNB moves, and unattributed flow. <strong>Value change</strong> is the raw portfolio delta over the window and includes any deposits/withdrawals. Holdings show <em>our</em> FIFO cost basis; positions acquired by transfer show no cost. Prices are USD at block time per Zerion; spam tokens filtered by Zerion.</div>
   </div>
 
   <!-- CLOSED TAB -->
@@ -558,17 +558,18 @@ function renderOnchainHero(){
   const el = document.getElementById('heroOnchain');
   if(!el) return;
   const pnlWin = s.pnl_window_usd, winDays = s.pnl_window_days;
-  const winLbl = winDays ? (winDays>=360 ? '~1 yr' : winDays+'d') + ' rolling' : 'rolling';
+  const winLbl = winDays ? (winDays>=360 ? '1-yr' : winDays+'d') : '';
+  const rm = s.realized_matched_usd, rall = s.realized_pnl_all_usd;
   el.innerHTML = `
     <div class="stat"><div class="stat-label">Portfolio Value</div>
       <div class="stat-val mono">${fmtUsd(s.portfolio_value_usd)}</div>
-      <div class="stat-sub">${ONCHAIN_HOLDINGS.length} holdings</div></div>
-    <div class="stat"><div class="stat-label">P&amp;L (${winLbl})</div>
+      <div class="stat-sub">${s.open_position_count!=null?s.open_position_count:ONCHAIN_HOLDINGS.length} positions · ${s.trade_count!=null?s.trade_count.toLocaleString():'—'} trades</div></div>
+    <div class="stat"><div class="stat-label">${winLbl} Value Change</div>
       <div class="stat-val mono ${pnlWin>=0?'pos':'neg'}">${fmtUsd(pnlWin)}</div>
-      <div class="stat-sub">${s.pnl_window_start||''}${s.pnl_window_end?' → '+s.pnl_window_end:''}</div></div>
-    <div class="stat"><div class="stat-label">Round-trip Trades</div>
-      <div class="stat-val mono">${s.trade_count!=null?s.trade_count:'—'}</div>
-      <div class="stat-sub">realized ${fmtUsd(s.realized_pnl_all_usd)}${s.unmatched_activity?` · ${s.unmatched_activity} unmatched`:''}</div></div>
+      <div class="stat-sub">${s.pnl_window_start||''}${s.pnl_window_end?' → '+s.pnl_window_end:''} · incl. deposits</div></div>
+    <div class="stat"><div class="stat-label">Realized P&amp;L</div>
+      <div class="stat-val mono ${rm>=0?'pos':'neg'}">${fmtUsd(rm)}</div>
+      <div class="stat-sub">matched round-trips${rall!=null?` · all-in ${fmtUsd(rall)} (gas/native)`:''}${s.unmatched_activity?` · ${s.unmatched_activity} unmatched`:''}</div></div>
     <div class="stat"><div class="stat-label">Capital in Coins</div>
       <div class="stat-val mono">${fmtUsd(s.value_in_coins_usd)}</div>
       <div class="stat-sub">volatile positions</div></div>

@@ -389,7 +389,7 @@ def build(wallet: str, chains: str, now_iso: str):
         win_start = datetime.fromtimestamp(pts[0][0], timezone.utc).date().isoformat()
         win_end = datetime.fromtimestamp(pts[-1][0], timezone.utc).date().isoformat()
         win_days = round((pts[-1][0] - pts[0][0]) / 86400)
-    realized_all = round(sum(t["realized_pnl_usd"] or 0 for t in trades), 2)
+    realized_matched = round(sum(t["realized_pnl_usd"] or 0 for t in trades), 2)
 
     summary = {
         "id": "current", "wallet": wallet,
@@ -398,7 +398,8 @@ def build(wallet: str, chains: str, now_iso: str):
         "value_in_stables_usd": round(stables_val, 2),
         "pnl_window_days": win_days, "pnl_window_start": win_start,
         "pnl_window_end": win_end, "pnl_window_usd": win_usd,
-        "realized_pnl_all_usd": pnl.get("realized_gain", realized_all),
+        "realized_matched_usd": realized_matched,
+        "realized_pnl_all_usd": pnl.get("realized_gain"),   # Zerion all-in (gas/native/unattributed); may be None
         "unrealized_pnl_usd": pnl.get("unrealized_gain",
                                       round(sum(h["unrealized_pnl_usd"] or 0 for h in holdings), 2)),
         "trade_count": len(trades),
