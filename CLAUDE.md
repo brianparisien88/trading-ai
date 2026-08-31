@@ -86,15 +86,34 @@ API was deliberately not used. The dashboard labels the "as of" date on the Open
 - Ambiguous FIFO pairings (`ambiguous = true`) are shown, never silently trusted.
 - Account-level figures (`account_summary`) are CAD (base currency); position-level
   figures are USD. Always label currency; never combine them unlabeled.
+- **Never let an empty/failed upstream fetch mutate the DB.** Sync jobs `die`/abort
+  on a zero-row fetch that normally has rows; stale-row cleanup runs only on
+  tables written that run; transient failures (rate limit / 5xx / empty) raise
+  `TransientError` → exit 0, tables untouched. See `docs/BUILD-PLAYBOOK.md` §3.
+- **Branch → PR → merge. No pushing to `main`.** `pr-checks.yml` runs deterministic
+  gates on every PR (free). For a review, ask Claude Code / `/code-review` to look
+  at the branch before merge — the gh-aw auto-reviewer is documented in
+  `docs/BUILD-PLAYBOOK.md` §5 but deliberately not installed (needs paid API key).
+- After any migration: `python sync/schema_snapshot.py` and commit
+  `docs/schema-snapshot.json` (CI fails the PR if it's stale) + note new
+  tables/columns here.
 
 ## Common commands
 
 ```bash
-# run the sync locally (needs the env vars)
+# run a sync locally (needs the env vars); --dry-run prints without writing
 cd sync && pip install -r requirements.txt && python sync.py
+python onchain.py --dry-run
 
-# trigger the scheduled sync now
-gh workflow run sync.yml
+# regenerate the schema snapshot after a migration
+python sync/schema_snapshot.py
+
+# trigger a scheduled workflow now
+gh workflow run sync.yml        # IBKR
+gh workflow run onchain.yml     # Zerion wallet
+
+# recompile the gh-aw review workflow after editing pr-review.md
+gh aw compile
 
 # preview the dashboard
 python3 -m http.server 8000 --directory app

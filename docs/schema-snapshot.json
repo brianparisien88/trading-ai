@@ -1,0 +1,962 @@
+{
+  "account_summary": [
+    {
+      "column": "id",
+      "default": "'current'::text",
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "net_liquidation",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "available_funds",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "currency",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "as_of",
+      "default": null,
+      "nullable": true,
+      "type": "date"
+    },
+    {
+      "column": "synced_at",
+      "default": "now()",
+      "nullable": false,
+      "type": "timestamp with time zone"
+    }
+  ],
+  "closed_trades": [
+    {
+      "column": "id",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "symbol",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "entry_time",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "entry_price",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "exit_time",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "exit_price",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "size",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "pnl",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "commission",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "cost_basis",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "return_pct",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "days_held",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "ambiguous",
+      "default": "false",
+      "nullable": false,
+      "type": "boolean"
+    },
+    {
+      "column": "ambiguous_reason",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "entry_order_id",
+      "default": null,
+      "nullable": true,
+      "type": "bigint"
+    },
+    {
+      "column": "exit_order_id",
+      "default": null,
+      "nullable": true,
+      "type": "bigint"
+    },
+    {
+      "column": "strategy",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "journal_thoughts",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "planned_stop",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "planned_target",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "contract_description",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "synced_at",
+      "default": "now()",
+      "nullable": false,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "contract_expiry",
+      "default": null,
+      "nullable": true,
+      "type": "date"
+    },
+    {
+      "column": "contract_type",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "contract_strike",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "underlying_price_entry",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "underlying_price_exit",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "underlying_price_latest",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "underlying_price_latest_at",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "trade_seq",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "underlying_price_horizon",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "contract_horizon_date",
+      "default": null,
+      "nullable": true,
+      "type": "date"
+    },
+    {
+      "column": "underlying_price_peak",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "underlying_peak_date",
+      "default": null,
+      "nullable": true,
+      "type": "date"
+    },
+    {
+      "column": "vix_at_entry",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "vix_at_exit",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "price_window",
+      "default": null,
+      "nullable": true,
+      "type": "jsonb"
+    },
+    {
+      "column": "setup_entry",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "chart_read_entry",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "chart_read_exit",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "setup_structure",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "setup_score",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "setup_reasons",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "setup_criteria",
+      "default": null,
+      "nullable": true,
+      "type": "jsonb"
+    },
+    {
+      "column": "trade_grade",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "grade_points",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "grade_reasons",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    }
+  ],
+  "onchain_holdings": [
+    {
+      "column": "id",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "wallet",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "chain",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "symbol",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "name",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "token_address",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "quantity",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "price",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "value_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "cost_basis_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "avg_entry_price",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "unrealized_pnl_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "unrealized_pnl_pct",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "first_bought_at",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "is_stablecoin",
+      "default": "false",
+      "nullable": true,
+      "type": "boolean"
+    },
+    {
+      "column": "is_spam",
+      "default": "false",
+      "nullable": true,
+      "type": "boolean"
+    },
+    {
+      "column": "synced_at",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    }
+  ],
+  "onchain_summary": [
+    {
+      "column": "id",
+      "default": "'current'::text",
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "wallet",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "portfolio_value_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "value_in_coins_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "value_in_stables_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "pnl_window_days",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "pnl_window_start",
+      "default": null,
+      "nullable": true,
+      "type": "date"
+    },
+    {
+      "column": "pnl_window_end",
+      "default": null,
+      "nullable": true,
+      "type": "date"
+    },
+    {
+      "column": "pnl_window_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "realized_pnl_all_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "unrealized_pnl_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "trade_count",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "open_position_count",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "unmatched_activity",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "synced_at",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "realized_matched_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "gas_fees_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "swap_friction_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "big_winners_count",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "big_losers_count",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "small_winners_count",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "small_losers_count",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "swap_friction_raw_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "swap_volume_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "swap_spread_rate",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "trade_count_1y",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "realized_1y_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "gas_fees_1y_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "swap_friction_1y_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "big_winners_1y",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "big_losers_1y",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "small_winners_1y",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "small_losers_1y",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    }
+  ],
+  "onchain_trades": [
+    {
+      "column": "id",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "wallet",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "chain",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "symbol",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "name",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "token_address",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "entry_time",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "exit_time",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "entry_price",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "exit_price",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "qty",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "cost_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "proceeds_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "realized_pnl_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "return_pct",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "hold_days",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "entry_tx",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "exit_tx",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "entry_kind",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "exit_kind",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "partial",
+      "default": "false",
+      "nullable": true,
+      "type": "boolean"
+    },
+    {
+      "column": "synced_at",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    }
+  ],
+  "open_positions": [
+    {
+      "column": "id",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "symbol",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "contract_description",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "entry_time",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "entry_price",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "cost_basis",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "market_value",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "unrealized_pnl",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "daily_pnl",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "dte",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "iv",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "volume",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "open_interest",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "unverified_entry_date",
+      "default": "false",
+      "nullable": false,
+      "type": "boolean"
+    },
+    {
+      "column": "synced_at",
+      "default": "now()",
+      "nullable": false,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "entry_order_id",
+      "default": null,
+      "nullable": true,
+      "type": "bigint"
+    },
+    {
+      "column": "strategy",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "journal_thoughts",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "planned_stop",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "planned_target",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "contract_type",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "contract_strike",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "contract_expiry",
+      "default": null,
+      "nullable": true,
+      "type": "date"
+    },
+    {
+      "column": "underlying_price_entry",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "underlying_price_latest",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "underlying_price_latest_at",
+      "default": null,
+      "nullable": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "price_window",
+      "default": null,
+      "nullable": true,
+      "type": "jsonb"
+    },
+    {
+      "column": "setup_structure",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "setup_score",
+      "default": null,
+      "nullable": true,
+      "type": "integer"
+    },
+    {
+      "column": "setup_reasons",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "setup_criteria",
+      "default": null,
+      "nullable": true,
+      "type": "jsonb"
+    },
+    {
+      "column": "setup_entry",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    },
+    {
+      "column": "chart_read_entry",
+      "default": null,
+      "nullable": true,
+      "type": "text"
+    }
+  ]
+}
