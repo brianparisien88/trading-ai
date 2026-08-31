@@ -527,6 +527,7 @@ const OPEN_COLS = [
   {key:'contract_type', label:'C/P'},
   {key:'entry_px', label:'Premium'},
   {key:'u_entry', label:'Stock @Entry'},
+  {key:'u_latest', label:'Stock Now'},
   {key:'u_move', label:'Stock Δ%'},
   {key:'dte', label:'DTE'},
   {key:'setup_score', label:'Setup'},
@@ -595,6 +596,7 @@ function renderRowsOpen(){
       <td>${fmtSide(o.contract_type)}</td>
       <td class="mono" style="color:var(--muted)">${o.entry_px!=null?'@'+o.entry_px:'—'}</td>
       <td class="mono" style="color:var(--muted)">${o.u_entry!=null?'$'+Number(o.u_entry).toFixed(2):'—'}</td>
+      <td class="mono" style="color:var(--muted)" title="${o.u_latest_at?'as of '+new Date(o.u_latest_at).toLocaleString():'last sync'}">${o.u_latest!=null?'$'+Number(o.u_latest).toFixed(2):'—'}</td>
       <td class="mono ${o.u_move==null?'':o.u_move>=0?'pos':'neg'}">${o.u_move==null?'—':(o.u_move>=0?'+':'')+o.u_move.toFixed(1)+'%'}</td>
       <td class="mono">${o.dte!=null ? o.dte+'d' : '—'}</td>
       <td class="mono">${fmtSetup(o.setup_score, o.setup_tier)}</td>
