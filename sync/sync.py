@@ -190,17 +190,6 @@ def flex_to_raw_trades(root: ET.Element, tz) -> list[dict]:
     return out
 
 
-def flex_expiry_by_conid(root: ET.Element) -> dict:
-    """conid -> expiry date (yyyyMMdd string) from the open positions."""
-    out = {}
-    for pos in root.iter("OpenPosition"):
-        a = pos.attrib
-        exp = (a.get("expiry") or "").strip()
-        if a.get("conid") and exp:
-            out[a["conid"]] = exp
-    return out
-
-
 def dte_from_expiry(expiry: str, today=None) -> int | None:
     if not expiry:
         return None
@@ -234,7 +223,27 @@ def flex_to_raw_positions(root: ET.Element) -> list[dict]:
             "daily_pnl": 0.0,  # not in an Activity Flex Query
             "currency": a.get("currency"),
             "entry_order_id": int(oid) if oid and str(oid).isdigit() else None,
+            # contract detail + the position's own open date (authoritative when present)
+            "put_call": (a.get("putCall") or "").strip().upper()[:1] or None,
+            "strike": _to_float(a.get("strike"), None),
+            "expiry": (a.get("expiry") or "").strip() or None,
+            "open_datetime": a.get("openDateTime") or a.get("holdingPeriodDateTime"),
         })
+    return out
+
+
+def flex_position_contract_by_conid(raw_positions: list[dict], tz) -> dict:
+    """conid -> {put_call, strike, expiry, open_time} from the parsed OpenPositions."""
+    out = {}
+    for p in raw_positions:
+        if not p.get("contract_id"):
+            continue
+        out[p["contract_id"]] = {
+            "put_call": p.get("put_call"),
+            "strike": p.get("strike"),
+            "expiry": p.get("expiry"),
+            "open_time": _parse_dt(p.get("open_datetime"), tz),
+        }
     return out
 
 
@@ -426,8 +435,13 @@ def _sorted_closes(closes: dict):
     return sorted(closes.items())  # [(iso_date, px), ...] chronological
 
 
-def price_window(closes: dict, entry_iso: str | None, exit_iso: str | None) -> list:
-    """[[date, close], ...] for ~CHART_WINDOW_DAYS trading days each side of the trade."""
+def price_window(closes: dict, entry_iso: str | None, exit_iso: str | None,
+                 open_ended: bool = False) -> list:
+    """
+    [[date, close], ...] for ~CHART_WINDOW_DAYS trading days each side of the trade.
+    open_ended=True (a still-open position): keep everything from entry to the
+    latest bar instead of cutting off CHART_WINDOW_DAYS after entry.
+    """
     if not closes or not entry_iso:
         return []
     rows = _sorted_closes(closes)
@@ -440,7 +454,7 @@ def price_window(closes: dict, entry_iso: str | None, exit_iso: str | None) -> l
     i_in = idx_on_or_after(entry_iso)
     i_out = idx_on_or_after(exit_iso) if exit_iso else i_in
     lo = max(0, i_in - CHART_WINDOW_DAYS)
-    hi = min(len(rows), i_out + CHART_WINDOW_DAYS + 1)
+    hi = len(rows) if open_ended else min(len(rows), i_out + CHART_WINDOW_DAYS + 1)
     return [[d, c] for d, c in rows[lo:hi]]
 
 
@@ -876,26 +890,55 @@ def _iso_date(v):
     return f"{v[:4]}-{v[4:6]}-{v[6:]}" if len(v) == 8 and v.isdigit() else (v or None)
 
 
-def open_row(p: dict, now_iso: str, expiry_by_conid: dict, order_by_conid: dict) -> dict:
-    # p["id"] is "open_{conid}". Prefer the pipeline's dte; fall back to the
-    # explicit Flex expiry attribute (the pipeline's parser expects the old
-    # IBKR-MCP description format and won't match Flex's).
+def open_row(p: dict, now_iso: str, contracts: dict, prices: dict,
+             order_by_conid: dict) -> dict:
+    # p["id"] is "open_{conid}".
     conid = str(p["id"]).replace("open_", "", 1)
+    c = contracts.get(conid, {})
+
+    # the position's own openDateTime is authoritative; fall back to the FIFO
+    # match the pipeline found by symbol.
+    entry_iso = c.get("open_time") or p.get("entry_time")
+    is_put = c.get("put_call") == "P"
+
     dte = p.get("dte")
     if dte is None:
-        dte = dte_from_expiry(expiry_by_conid.get(conid, ""))
+        dte = dte_from_expiry(c.get("expiry") or "")
+
+    px = prices.get(p["sym"], {})
+    closes = px.get("closes", {})
+    f_in = trend_features(closes, entry_iso)
+    pw = price_window(closes, entry_iso, None, open_ended=True)
+    structure = pivot_structure(pw, entry_iso)
+    setup = classify_setup(f_in, is_put)
+    ss, ss_why, ss_crit = setup_score(f_in, structure, is_put)
+
     return {
         "id": p["id"],
         "symbol": p["sym"],
         "contract_description": p.get("desc"),
-        "entry_time": p.get("entry_time"),
+        "contract_type": c.get("put_call"),
+        "contract_strike": _num(c.get("strike")),
+        "contract_expiry": _iso_date(c.get("expiry")),
+        "entry_time": entry_iso,
         "entry_price": _num(p.get("entry_px")),
         "cost_basis": _num(p.get("cost_basis")),
         "market_value": _num(p.get("market_value")),
         "unrealized_pnl": _num(p.get("unrealized_pnl")),
         "daily_pnl": _num(p.get("daily_pnl")),
         "dte": _num(dte),
-        "unverified_entry_date": bool(p.get("unverified_entry_date")),
+        "underlying_price_entry": close_on_or_before(closes, entry_iso),
+        "underlying_price_latest": px.get("latest"),
+        "underlying_price_latest_at": px.get("latest_at"),
+        "price_window": pw or None,
+        "setup_structure": structure,
+        "setup_score": ss,
+        "setup_reasons": "; ".join(ss_why) or None,
+        "setup_criteria": ss_crit or None,
+        "setup_entry": setup,
+        "chart_read_entry": entry_read(p["sym"], f_in, setup, c.get("strike"),
+                                       c.get("put_call"), _iso_date(c.get("expiry")), entry_iso),
+        "unverified_entry_date": bool(p.get("unverified_entry_date")) and not c.get("open_time"),
         "entry_order_id": order_by_conid.get(conid),
         "synced_at": now_iso,
     }
@@ -970,7 +1013,7 @@ def main() -> None:
 
     raw_trades = flex_to_raw_trades(root, tz)
     raw_positions = flex_to_raw_positions(root)
-    expiry_by_conid = flex_expiry_by_conid(root)
+    pos_contracts = flex_position_contract_by_conid(raw_positions, tz)
     log(f"parsed {len(raw_trades)} trade executions, {len(raw_positions)} open positions")
 
     if not raw_trades and not raw_positions:
@@ -1011,7 +1054,10 @@ def main() -> None:
         t["_seq"] = i
 
     tickers = {t["sym"] for t in closed if t.get("sym")}
+    tickers |= {p["sym"] for p in opened if p.get("sym")}
     dates = [(t.get("entry_time") or t.get("exit_time") or "")[:10] for t in closed]
+    dates += [(pos_contracts.get(str(p["id"]).replace("open_", "", 1), {}).get("open_time")
+               or p.get("entry_time") or "")[:10] for p in opened]
     earliest = min((d for d in dates if d), default=datetime.now(timezone.utc).date().isoformat())
     since_date = datetime.strptime(earliest, "%Y-%m-%d").date()
     log(f"fetching underlying prices for {len(tickers)} tickers (Yahoo)")
@@ -1035,7 +1081,7 @@ def main() -> None:
     log(f"closed_trades: upserted {len(closed_rows)} rows "
         f"({carried} carried journal notes from a just-closed position)")
 
-    open_rows = [open_row(p, now_iso, expiry_by_conid, order_by_conid) for p in opened]
+    open_rows = [open_row(p, now_iso, pos_contracts, prices, order_by_conid) for p in opened]
     if open_rows:
         sb.upsert("open_positions", open_rows)
     removed = sb.delete_not_in("open_positions", [r["id"] for r in open_rows])

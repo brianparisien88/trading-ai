@@ -313,9 +313,21 @@ function mapOpen(r){
     unrealized_pnl: Number(r.unrealized_pnl)||0,
     daily_pnl: Number(r.daily_pnl)||0,
     dte: r.dte,
-    iv: r.iv,
-    vol: r.volume,
-    oi: r.open_interest,
+    contract_type: r.contract_type,
+    contract_strike: r.contract_strike,
+    contract_expiry: r.contract_expiry,
+    u_entry: r.underlying_price_entry,
+    u_latest: r.underlying_price_latest,
+    u_latest_at: r.underlying_price_latest_at,
+    u_move: dirMove(r.underlying_price_entry, r.underlying_price_latest, r.contract_type),
+    price_window: r.price_window,
+    setup_structure: r.setup_structure,
+    setup_score: r.setup_score,
+    setup_reasons: r.setup_reasons,
+    setup_tier: r.setup_criteria && r.setup_criteria.tier,
+    setup_intent: r.setup_criteria && r.setup_criteria.intent,
+    setup_entry: r.setup_entry,
+    chart_read_entry: r.chart_read_entry,
     unverified_entry_date: r.unverified_entry_date,
     synced_at: r.synced_at,
     strategy: r.strategy || '',
@@ -512,12 +524,12 @@ function refreshOpenEditors(){
 const OPEN_COLS = [
   {key:'sym', label:'Ticker'},
   {key:'desc', label:'Contract', hide:true},
-  {key:'entry_px', label:'Entry'},
+  {key:'contract_type', label:'C/P'},
+  {key:'entry_px', label:'Premium'},
+  {key:'u_entry', label:'Stock @Entry'},
+  {key:'u_move', label:'Stock Δ%'},
   {key:'dte', label:'DTE'},
-  {key:'iv', label:'IV'},
-  {key:'vol', label:'Vol'},
-  {key:'oi', label:'OI'},
-  {key:'daily_pnl', label:'Today', hide:true},
+  {key:'setup_score', label:'Setup'},
   {key:'unrealized_pnl', label:'P&L'},
 ];
 
@@ -580,12 +592,12 @@ function renderRowsOpen(){
     return `<tr class="main-row" onclick="toggleOpenRow('${o.id}')">
       <td class="sym">${o.sym}${o.unverified_entry_date?' <span class="badge warn">entry?</span>':''} <span class="journal-flag" id="oflag-${o.id}">${(j.strategy||j.thoughts)?'logged':'—'}</span></td>
       <td class="desc col-hide">${o.desc}</td>
+      <td>${fmtSide(o.contract_type)}</td>
       <td class="mono" style="color:var(--muted)">${o.entry_px!=null?'@'+o.entry_px:'—'}</td>
+      <td class="mono" style="color:var(--muted)">${o.u_entry!=null?'$'+Number(o.u_entry).toFixed(2):'—'}</td>
+      <td class="mono ${o.u_move==null?'':o.u_move>=0?'pos':'neg'}">${o.u_move==null?'—':(o.u_move>=0?'+':'')+o.u_move.toFixed(1)+'%'}</td>
       <td class="mono">${o.dte!=null ? o.dte+'d' : '—'}</td>
-      <td class="mono" style="color:var(--muted)">${o.iv!=null ? (o.iv*100).toFixed(0)+'%' : '—'}</td>
-      <td class="mono" style="color:var(--muted)">${o.vol!=null ? o.vol : '—'}</td>
-      <td class="mono" style="color:var(--muted)">${o.oi!=null ? Number(o.oi).toLocaleString() : '—'}</td>
-      <td class="mono ${o.daily_pnl>=0?'pos':'neg'} col-hide">${fmt(o.daily_pnl)}</td>
+      <td class="mono">${fmtSetup(o.setup_score, o.setup_tier)}</td>
       <td class="mono ${o.unrealized_pnl>=0?'pos':'neg'}">${fmt(o.unrealized_pnl)}</td>
     </tr>
     <tr class="expand-row" id="oexp-${o.id}"><td class="expand-cell" colspan="${OPEN_COLS.length}" id="ocell-${o.id}"></td></tr>`;
@@ -611,10 +623,17 @@ function renderOpenBody(id){
   if(!cell) return;
   const o = OPEN_RAW.find(x=>x.id===id) || {};
   const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
-  const rr = document.createElement('div');
-  cell.innerHTML = `<div class="context"><div><span>Contract</span> ${[o.sym,o.desc].filter(Boolean).join(' ')}</div>
-    <div><span>Entry</span> @${o.entry_px} <span style="color:var(--dim)">· cost $${(Number(o.cost_basis)||0).toFixed(2)} · unrealized ${fmt(o.unrealized_pnl)} · ${o.dte!=null?o.dte+' DTE':''}</span></div>
+  const px = v => v==null ? '—' : '$'+Number(v).toFixed(2);
+  const held = o.entry_time ? daysHeld(o.entry_time) : null;
+  const moveTxt = o.u_move==null ? '' :
+    ` <span class="${o.u_move>=0?'pos':'neg'}">${o.u_move>=0?'+':''}${o.u_move.toFixed(1)}% ${o.contract_type==='P'?'(your way)':''}</span>`;
+  cell.innerHTML = `<div class="context">
+    <div><span>Contract</span> ${[o.sym,o.desc].filter(Boolean).join(' ')} ${fmtSide(o.contract_type)}</div>
+    <div><span>Premium</span> @${o.entry_px} <span style="color:var(--dim)">· cost $${(Number(o.cost_basis)||0).toFixed(2)} · unrealized ${fmt(o.unrealized_pnl)} · ${o.dte!=null?o.dte+' DTE':''}${o.contract_expiry?' · exp '+fmtExpiry(o.contract_expiry):''}${held!=null?' · held '+held+'d':''}</span></div>
+    <div><span>Stock ${o.sym}</span> ${px(o.u_entry)} <span style="color:var(--dim)">entry</span> &rarr; ${px(o.u_latest)} <span style="color:var(--dim)">latest</span>${moveTxt}</div>
+    ${o.setup_score!=null ? `<div><span>Setup score</span> ${fmtSetup(o.setup_score,o.setup_tier)} <span style="color:var(--dim)">${o.setup_reasons||''}</span></div>` : ''}
     <div id="orr-${id}" class="save-note">${rrText(j, o.entry_px, null)}</div></div>
+    ${miniChart(o)}
     <div id="ojournal-${id}"></div>`;
   mountJournalEditor(document.getElementById('ojournal-'+id), 'open_positions', id, j);
   // live R:R while typing
@@ -882,6 +901,7 @@ function miniChart(t){
   const idxOnAfter = iso => { if(!iso) return -1; const d=iso.slice(0,10); for(let i=0;i<n;i++) if(w[i][0]>=d) return i; return n-1; };
   const iIn = idxOnAfter(t.entry_time), iOut = idxOnAfter(t.exit_time);
   const i15 = (iOut>=0 && iOut+15 < n) ? iOut+15 : -1;
+  const iNow = (iOut < 0) ? n-1 : -1;   // still open -> mark the latest bar instead of an exit
   let price='', mline='';
   for(let i=0;i<n;i++){ price += (i?'L':'M')+X(i).toFixed(1)+','+Y(vals[i]).toFixed(1)+' '; }
   for(let i=0;i<n;i++){ mline += (i?'L':'M')+X(i).toFixed(1)+','+Y(sma(i,20)).toFixed(1)+' '; }
@@ -895,11 +915,11 @@ function miniChart(t){
       ${gy}${held}${vmark(iIn,'var(--green)')}${vmark(iOut,'var(--blue)')}
       <path d="${mline}" fill="none" stroke="var(--dim)" stroke-width="1.1"/>
       <path d="${price}" fill="none" stroke="var(--text)" stroke-width="1.5" stroke-linejoin="round"/>
-      ${dot(iIn,'var(--green)','in')}${dot(iOut,'var(--blue)','out')}${dot(i15,'var(--amber)','+15d')}
+      ${dot(iIn,'var(--green)','in')}${dot(iOut,'var(--blue)','out')}${dot(i15,'var(--amber)','+15d')}${dot(iNow,'var(--blue)','now')}
     </svg>
     <div style="display:flex;gap:14px;font-size:10px;color:var(--dim);margin-top:4px;flex-wrap:wrap;">
       <span style="color:var(--muted)">close</span><span>20-day avg</span>
-      <span style="color:var(--green)">● entry</span><span style="color:var(--blue)">● exit</span><span style="color:var(--amber)">● exit +15 trading days</span>
+      <span style="color:var(--green)">● entry</span>${iNow>=0?'<span style="color:var(--blue)">● latest</span>':'<span style="color:var(--blue)">● exit</span><span style="color:var(--amber)">● exit +15 trading days</span>'}
     </div>
     ${t.chart_read_entry ? `<div style="margin-top:10px;"><span>Read — entry</span> ${t.chart_read_entry}</div>` : ''}
     ${t.chart_read_exit ? `<div style="margin-top:6px;"><span>Read — exit</span> ${t.chart_read_exit}</div>` : ''}
