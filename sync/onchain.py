@@ -75,22 +75,26 @@ def _hdr():
 
 
 def zget(path: str, params: dict | None = None) -> dict:
-    """GET with retry. `path` is relative to ZERION_BASE."""
+    """GET with retry. Raises (never returns empty) so a rate-limit / outage is a
+    clean failure the caller can die on rather than silently empty data."""
     url = path if path.startswith("http") else f"{ZERION_BASE}{path}"
-    for attempt in (1, 2, 3):
+    last = None
+    for attempt in (1, 2, 3, 4, 5):
         try:
             r = requests.get(url, headers=_hdr(), params=params, timeout=HTTP_TIMEOUT)
             if r.status_code == 429:
-                time.sleep(2 * attempt)
+                last = "429 rate limited"
+                time.sleep(5 * attempt)
                 continue
             r.raise_for_status()
             return r.json()
         except requests.RequestException as e:
-            if attempt == 3:
-                raise
+            last = str(e)
+            if attempt == 5:
+                break
             log(f"  zerion {path} attempt {attempt} failed ({e}); retrying")
-            time.sleep(1.5 * attempt)
-    return {}
+            time.sleep(2 * attempt)
+    die(f"Zerion API unreachable for {path} ({last}). Aborting -- tables left intact.")
 
 
 def zpaged(path: str, params: dict) -> list:
