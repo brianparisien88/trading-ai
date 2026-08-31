@@ -516,9 +516,10 @@ def build(wallet: str, chains: str, now_iso: str):
             clean_fric += dc
             clean_vol += vol
     clean_rate = (clean_fric / clean_vol) if clean_vol else 0.0
-    friction = round(clean_rate * all_vol, 2)          # rate-from-clean, applied to all volume
+    friction = round(f_clamped, 2)          # headline: measured, per-swap outliers capped
+    rate_est = round(clean_rate * all_vol, 2)
     log(f"  spread: raw ${f_raw:,.0f} | clamped ${f_clamped:,.0f} ({n_clamped} capped) | "
-        f"clean {n_clean}/{n_priced} swaps rate {clean_rate*100:.2f}% -> est ${friction:,.0f} "
+        f"clean {n_clean}/{n_priced} swaps rate {clean_rate*100:.2f}% -> ${rate_est:,.0f} "
         f"on ${all_vol:,.0f} volume")
 
     summary = {
@@ -539,6 +540,9 @@ def build(wallet: str, chains: str, now_iso: str):
         "unmatched_activity": unmatched,
         "gas_fees_usd": gas_fees,
         "swap_friction_usd": friction,
+        "swap_friction_raw_usd": round(f_raw, 2),
+        "swap_volume_usd": round(all_vol, 2),
+        "swap_spread_rate": round(clean_rate, 5),
         "big_winners_count": big_w,
         "big_losers_count": big_l,
         "small_winners_count": small_w,
