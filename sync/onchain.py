@@ -337,6 +337,11 @@ def build(wallet: str, chains: str, now_iso: str):
 
     trade_rows, open_lots, unmatched = match_trades(swaps)
 
+    # drop FIFO dust slices: negligible cost AND negligible realized P&L
+    DUST = 1.0
+    trade_rows = [r for r in trade_rows
+                  if (r["cost_usd"] or 0) >= DUST or abs(r["realized_pnl_usd"] or 0) >= DUST]
+
     # ---- holdings: Zerion live position is truth for value; our lots give cost basis
     lot_by_key = {}
     for k, q in open_lots.items():
@@ -352,14 +357,17 @@ def build(wallet: str, chains: str, now_iso: str):
         k = _key(p["chain"], p["address"], sym)
         val = p["value_usd"] or 0.0
         stable = is_stable(sym)
-        if stable:
-            stables_val += val
-        else:
-            coins_val += val
         lot = lot_by_key.get(k)
         cost = lot["cost"] if lot else None
         avg_entry = (lot["cost"] / lot["qty"]) if (lot and lot["qty"]) else None
         unreal = (val - cost) if (cost is not None and not stable) else None
+        # skip negligible dust: worth < $1 now AND never cost more than $10
+        if val < 1 and (cost or 0) < 10:
+            continue
+        if stable:
+            stables_val += val
+        else:
+            coins_val += val
         holdings.append({
             "id": k, "wallet": wallet, "chain": p["chain"], "symbol": sym,
             "name": p["name"], "token_address": p["address"],
@@ -403,7 +411,9 @@ def build(wallet: str, chains: str, now_iso: str):
         "unrealized_pnl_usd": pnl.get("unrealized_gain",
                                       round(sum(h["unrealized_pnl_usd"] or 0 for h in holdings), 2)),
         "trade_count": len(trades),
-        "open_position_count": sum(1 for h in holdings if not h["is_stablecoin"] and not h["is_spam"]),
+        "open_position_count": sum(1 for h in holdings
+                                   if not h["is_stablecoin"] and not h["is_spam"]
+                                   and (h["value_usd"] or 0) >= 1),
         "unmatched_activity": unmatched,
         "synced_at": now_iso,
     }
