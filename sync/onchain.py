@@ -38,6 +38,12 @@ DEFAULT_WALLET = "0x3414ec2d1c63008e1cda0e2155b7334c446a0025"
 DEFAULT_CHAINS = "ethereum,binance-smart-chain"
 HTTP_TIMEOUT = 45
 
+
+class TransientError(RuntimeError):
+    """Rate limit / API outage / empty response -- expected, not a bug. main()
+    exits 0 on these so a scheduled run doesn't page us; the tables are left
+    untouched and the next run recovers."""
+
 STABLES = {
     "USDC", "USDT", "DAI", "USDE", "USDS", "FRAX", "TUSD", "USDP", "GUSD",
     "PYUSD", "FDUSD", "USDD", "CRVUSD", "LUSD", "SUSD", "USDBC", "BUSD",
@@ -94,7 +100,7 @@ def zget(path: str, params: dict | None = None) -> dict:
                 break
             log(f"  zerion {path} attempt {attempt} failed ({e}); retrying")
             time.sleep(2 * attempt)
-    die(f"Zerion API unreachable for {path} ({last}). Aborting -- tables left intact.")
+    raise TransientError(f"Zerion API unreachable for {path} ({last})")
 
 
 def zpaged(path: str, params: dict) -> list:
@@ -401,9 +407,8 @@ def build(wallet: str, chains: str, now_iso: str):
     log(f"  {len(positions)} positions, {len(swaps)} swap txns")
 
     if not swaps:
-        die("Zerion returned 0 trade transactions -- treating as a transient API "
-            "failure (this wallet has a long swap history). Not touching the "
-            "onchain tables. Re-run the sync.")
+        raise TransientError("Zerion returned 0 trade transactions -- transient "
+                             "API failure (this wallet has a long swap history)")
 
     trade_rows, open_lots, unmatched, weth_inv = match_trades(swaps)
 
@@ -590,7 +595,11 @@ def main() -> None:
     secret_key = os.environ.get("SUPABASE_SECRET_KEY") or die("SUPABASE_SECRET_KEY not set")
     now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-    holdings, trades, summary = build(wallet, chains, now_iso)
+    try:
+        holdings, trades, summary = build(wallet, chains, now_iso)
+    except TransientError as e:
+        log(f"transient: {e}. Tables left intact; next run will recover. Exiting 0.")
+        return
     log(f"built {len(holdings)} holdings, {len(trades)} round-trip trades, "
         f"{summary['unmatched_activity']} unmatched swaps")
 

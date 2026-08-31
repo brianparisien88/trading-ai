@@ -1,0 +1,36 @@
+name: Sync onchain wallet to Supabase
+
+# Pulls the tracked wallet's crypto activity from the Zerion API and writes
+# onchain_holdings / onchain_trades / onchain_summary. Independent of the IBKR
+# sync so a Zerion hiccup never fails that job. onchain.py exits 0 (no alert) on
+# transient failures (rate limit / API down / empty response) and leaves the
+# tables untouched; it only exits non-zero on a real bug.
+
+on:
+  schedule:
+    - cron: '30 12 * * *'   # 30 min after the IBKR sync, so they don't race on Supabase
+  workflow_dispatch:
+
+concurrency:
+  group: onchain-sync
+  cancel-in-progress: false
+
+jobs:
+  onchain:
+    runs-on: ubuntu-latest
+    if: ${{ vars.ONCHAIN_ENABLED != 'false' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install -r sync/requirements.txt
+      - name: Run onchain sync
+        working-directory: sync
+        env:
+          ZERION_API_KEY: ${{ secrets.ZERION_API_KEY }}
+          ONCHAIN_WALLET: ${{ vars.ONCHAIN_WALLET }}
+          ONCHAIN_CHAINS: ${{ vars.ONCHAIN_CHAINS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python onchain.py
