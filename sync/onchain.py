@@ -318,8 +318,11 @@ def _days(a_iso: str | None, b_iso: str | None):
         return None
 
 
-def _tid(r: dict) -> str:
-    raw = f"{r['entry_tx']}|{r['exit_tx']}|{r.get('token_address')}|{r['qty']:.6f}"
+def _tid(r: dict, seq: int) -> str:
+    # seq disambiguates FIFO slices that would otherwise hash identically
+    # (e.g. one exit consuming two equal-size lots of the same token).
+    raw = (f"{r['entry_tx']}|{r['exit_tx']}|{r.get('token_address')}|"
+           f"{r['entry_time']}|{r['qty']:.10f}|{seq}")
     return hashlib.sha1(raw.encode()).hexdigest()[:24]
 
 
@@ -368,10 +371,14 @@ def build(wallet: str, chains: str, now_iso: str):
             "is_stablecoin": stable, "is_spam": p["is_trash"], "synced_at": now_iso,
         })
 
-    trades = []
-    for r in trade_rows:
-        r = {**r, "id": _tid(r), "wallet": wallet, "synced_at": now_iso}
-        trades.append(r)
+    trades, seen = [], set()
+    for i, r in enumerate(trade_rows):
+        tid = _tid(r, i)
+        while tid in seen:                       # last-resort guard
+            i += 1_000_000
+            tid = _tid(r, i)
+        seen.add(tid)
+        trades.append({**r, "id": tid, "wallet": wallet, "synced_at": now_iso})
 
     # ---- summary
     portfolio_value = sum(h["value_usd"] or 0 for h in holdings)
@@ -426,11 +433,22 @@ def main() -> None:
     sb = Supabase(supabase_url, secret_key)
     if holdings:
         sb.upsert("onchain_holdings", holdings)
-        sb.delete_not_in("onchain_holdings", [h["id"] for h in holdings])
     if trades:
         sb.upsert("onchain_trades", trades)
-        sb.delete_not_in("onchain_trades", [t["id"] for t in trades])
     sb.upsert("onchain_summary", [summary])
+
+    # drop anything this run didn't refresh (one query, no giant id-in-list URL)
+    for table in ("onchain_holdings", "onchain_trades"):
+        r = requests.delete(f"{sb.base}/{table}", params={"synced_at": f"lt.{now_iso}"},
+                            headers={**sb.headers, "Prefer": "return=representation"},
+                            timeout=HTTP_TIMEOUT)
+        if r.ok:
+            try:
+                n = len(r.json())
+            except ValueError:
+                n = 0
+            if n:
+                log(f"  {table}: removed {n} stale rows")
     log("onchain sync done")
 
 
