@@ -481,16 +481,19 @@ def build(wallet: str, chains: str, now_iso: str):
         win_end = datetime.fromtimestamp(pts[-1][0], timezone.utc).date().isoformat()
         win_days = round((pts[-1][0] - pts[0][0]) / 86400)
     realized_matched = round(sum(t["realized_pnl_usd"] or 0 for t in trades), 2)
-    _p = [t["realized_pnl_usd"] or 0 for t in trades]
-    big_w = sum(1 for x in _p if x >= 200)
-    big_l = sum(1 for x in _p if x <= -200)
-    small_w = sum(1 for x in _p if 0 < x < 50)
-    small_l = sum(1 for x in _p if -50 < x < 0)
+
+    def _bands(rows):
+        p = [t["realized_pnl_usd"] or 0 for t in rows]
+        return (sum(1 for x in p if x >= 200), sum(1 for x in p if x <= -200),
+                sum(1 for x in p if 0 < x < 50), sum(1 for x in p if -50 < x < 0))
+
+    big_w, big_l, small_w, small_l = _bands(trades)
 
     _cut1y = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat().replace("+00:00", "Z")
     _t1y = [t for t in trades if (t.get("exit_time") or "") >= _cut1y]
     trade_count_1y = len(_t1y)
     realized_1y = round(sum(t["realized_pnl_usd"] or 0 for t in _t1y), 2)
+    big_w_1y, big_l_1y, small_w_1y, small_l_1y = _bands(_t1y)
 
     cutoff_1y = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat().replace("+00:00", "Z")
     gas_fees = round(sum(s.get("fee_usd") or 0 for s in swaps), 2)
@@ -562,6 +565,10 @@ def build(wallet: str, chains: str, now_iso: str):
         "realized_1y_usd": realized_1y,
         "gas_fees_1y_usd": gas_fees_1y,
         "swap_friction_1y_usd": friction_1y,
+        "big_winners_1y": big_w_1y,
+        "big_losers_1y": big_l_1y,
+        "small_winners_1y": small_w_1y,
+        "small_losers_1y": small_l_1y,
         "synced_at": now_iso,
     }
     return holdings, trades, summary
