@@ -72,6 +72,8 @@
   .desc{color:var(--muted); font-size:11px;}
   .badge{font-size:9.5px; padding:2px 6px; border-radius:4px; background:var(--surface2); color:var(--muted); display:inline-block;}
   .badge.warn{background:rgba(212,167,44,.15); color:var(--amber);}
+  .badge.side-put{background:rgba(212,167,44,.13); color:var(--amber);}
+  .badge.side-call{background:rgba(74,158,255,.13); color:var(--blue);}
   .journal-flag{font-size:10px; color:var(--dim);}
   .journal-flag.filled{color:var(--green);}
   .empty{padding:24px 10px; text-align:center; color:var(--dim); font-size:12.5px;}
@@ -210,7 +212,7 @@ let sortClosed = {key:'exit_time', dir:-1};
 
 // Strategy dropdown choices for the Trade History journal. Edit this list to change them.
 const STRATEGY_OPTIONS = [
-  "Reversal / bottom-fish",
+  "Reversal / counter-trend",
   "Continuation",
   "Chop / range",
   "1M double bottom / 2D double bottom - 8H/45min ready",
@@ -279,6 +281,11 @@ function fmtGrade(g){
   if(!g) return '<span style="color:var(--dim)">—</span>';
   const c = g==='A' ? 'var(--green)' : g==='B' ? 'var(--muted)' : g==='C' ? 'var(--amber)' : 'var(--red)';
   return `<span style="color:${c};font-weight:600;">${g}</span>`;
+}
+function fmtSide(t){
+  if(t==='P') return '<span class="badge side-put" title="long put — bearish / short direction">PUT</span>';
+  if(t==='C') return '<span class="badge side-call" title="long call — bullish / long direction">CALL</span>';
+  return '<span style="color:var(--dim)">—</span>';
 }
 function fmtSetup(s, tier){
   if(s == null) return '<span style="color:var(--dim)">—</span>';
@@ -623,6 +630,7 @@ const CLOSED_COLS = [
   {key:'exit_time', label:'Date Closed'},
   {key:'entry_time', label:'Date Opened'},
   {key:'sym', label:'Ticker'},
+  {key:'contract_type', label:'C/P'},
   {key:'trade_grade', label:'Grade'},
   {key:'setup_score', label:'Setup'},
   {key:'days_held', label:'Days Held', hide:true},
@@ -998,6 +1006,7 @@ function renderRowsClosed(){
       <td class="mono">${fmtDateShort(t.exit_time)}</td>
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
       <td class="sym">${t.sym} ${t.ambiguous?'<span class="badge warn">check</span>':''}${t.recovered?` <span class="badge rec" title="closed at a loss, then ran +${Math.round(t.peak_move)}% before expiry">rec</span>`:''} <span class="journal-flag" id="flag-${t.id}">—</span></td>
+      <td>${fmtSide(t.contract_type)}</td>
       <td>${fmtGrade(t.trade_grade)}</td>
       <td class="mono">${fmtSetup(t.setup_score, t.setup_tier)}</td>
       <td class="mono col-hide">${t.days_held!=null ? t.days_held+'d' : '—'}</td>
