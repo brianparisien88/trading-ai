@@ -396,6 +396,11 @@ def build(wallet: str, chains: str, now_iso: str):
     chart = fetch_year_chart(wallet, chains)
     log(f"  {len(positions)} positions, {len(swaps)} swap txns")
 
+    if not swaps:
+        die("Zerion returned 0 trade transactions -- treating as a transient API "
+            "failure (this wallet has a long swap history). Not touching the "
+            "onchain tables. Re-run the sync.")
+
     trade_rows, open_lots, unmatched, weth_inv = match_trades(swaps)
 
     # drop FIFO dust slices: negligible cost AND negligible realized P&L
@@ -596,14 +601,16 @@ def main() -> None:
             "onchain tables. Check ZERION_API_KEY / wallet / chain ids.")
 
     sb = Supabase(supabase_url, secret_key)
+    wrote = []
     if holdings:
-        sb.upsert("onchain_holdings", holdings)
+        sb.upsert("onchain_holdings", holdings); wrote.append("onchain_holdings")
     if trades:
-        sb.upsert("onchain_trades", trades)
+        sb.upsert("onchain_trades", trades); wrote.append("onchain_trades")
     sb.upsert("onchain_summary", [summary])
 
-    # drop anything this run didn't refresh (one query, no giant id-in-list URL)
-    for table in ("onchain_holdings", "onchain_trades"):
+    # drop anything this run didn't refresh -- but only on tables we actually
+    # wrote to this run (never let an empty fetch wipe a populated table).
+    for table in wrote:
         r = requests.delete(f"{sb.base}/{table}", params={"synced_at": f"lt.{now_iso}"},
                             headers={**sb.headers, "Prefer": "return=representation"},
                             timeout=HTTP_TIMEOUT)
