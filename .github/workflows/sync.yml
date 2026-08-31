@@ -20,6 +20,8 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      HAS_ZERION: ${{ secrets.ZERION_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,3 +36,14 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: python sync.py
+
+      - name: Run onchain sync
+        if: ${{ env.HAS_ZERION == 'true' }}
+        working-directory: sync
+        env:
+          ZERION_API_KEY: ${{ secrets.ZERION_API_KEY }}
+          ONCHAIN_WALLET: ${{ vars.ONCHAIN_WALLET }}
+          ONCHAIN_CHAINS: ${{ vars.ONCHAIN_CHAINS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python onchain.py

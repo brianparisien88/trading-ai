@@ -124,6 +124,7 @@
     <div class="tab active" data-tab="open" onclick="switchTab('open')">Open Trades</div>
     <div class="tab" data-tab="closed" onclick="switchTab('closed')">Trade History</div>
     <div class="tab" data-tab="analyze" onclick="switchTab('analyze')">Analyze a Trade</div>
+    <div class="tab" data-tab="onchain" onclick="switchTab('onchain')">Onchain</div>
   </div>
 
   <!-- ANALYZE TAB -->
@@ -164,6 +165,27 @@
     <div class="data-note">Positions and balances come from IBKR's Flex report, which is <strong>end-of-day, ~1 business day behind live</strong> — a position closed today still shows here until the next day's sync. Entry price is IBKR's actual average cost basis (includes commission).</div>
   </div>
 
+  <!-- ONCHAIN TAB -->
+  <div class="panel" id="panel-onchain">
+    <div class="hero hero5" id="heroOnchain"></div>
+    <div class="toolbar">
+      <div class="synced" id="onchainWallet" style="font-family:var(--mono,monospace);"></div>
+      <div class="synced" id="syncedOnchain"></div>
+    </div>
+    <div style="font-size:12px; color:var(--muted); margin:14px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Holdings</div>
+    <table class="ledger" id="tableOnchainHoldings">
+      <thead><tr id="theadOnchainHoldings"></tr></thead>
+      <tbody id="rowsOnchainHoldings"></tbody>
+    </table>
+    <div style="font-size:12px; color:var(--muted); margin:22px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Round-trip trades</div>
+    <table class="ledger" id="tableOnchainTrades">
+      <thead><tr id="theadOnchainTrades"></tr></thead>
+      <tbody id="rowsOnchainTrades"></tbody>
+    </table>
+    <div class="more" id="loadMoreOnchain" style="display:none;">Show more</div>
+    <div class="data-note">Wallet activity from the <strong>Zerion API</strong>, refreshed on the daily sync. A <strong>round-trip trade</strong> pairs a buy of a token (from a stablecoin, ETH/BNB, or another token) against later sells, FIFO. A <strong>token→token</strong> swap closes one position and opens another at the swap's USD value. Partial sells leave the remainder as an open holding. LP, staking, bridging and airdrops are ignored; swaps that don't fit a round-trip are counted as <em>unmatched activity</em>. Prices are USD at block time per Zerion. Spam/worthless airdropped tokens are filtered out.</div>
+  </div>
+
   <!-- CLOSED TAB -->
   <div class="panel" id="panel-closed">
     <div class="hero hero5" id="heroClosed"></div>
@@ -202,6 +224,8 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 let CLOSED_RAW = [];
 let OPEN_RAW = [];
 let ACCOUNT = null;   // { net_liquidation, available_funds, currency, as_of } — null until synced
+let ONCHAIN_HOLDINGS = [], ONCHAIN_TRADES = [], ONCHAIN_SUMMARY = null;
+let visibleOnchain = 60, sortOnchain = {key:'exit_time', dir:-1};
 let session = null;
 let PAGE = 60, visibleClosed = PAGE, filterClosed = "", filterOpen = "", onlyRecovered = false;
 // A "recovered cut": exited at a loss, then the underlying ran >= this % in the
@@ -422,6 +446,18 @@ async function loadData(){
   };
   CLOSED_RAW.forEach(seed);
   OPEN_RAW.forEach(seed);
+
+  // onchain (independent of the IBKR tables; empty until the first onchain sync)
+  try {
+    const [ocH, ocT, ocS] = await Promise.all([
+      db.from('onchain_holdings').select('*'),
+      db.from('onchain_trades').select('*'),
+      db.from('onchain_summary').select('*').eq('id','current').maybeSingle(),
+    ]);
+    ONCHAIN_HOLDINGS = (ocH && ocH.data) || [];
+    ONCHAIN_TRADES   = (ocT && ocT.data) || [];
+    ONCHAIN_SUMMARY  = (ocS && !ocS.error) ? ocS.data : null;
+  } catch(e){ ONCHAIN_HOLDINGS = []; ONCHAIN_TRADES = []; ONCHAIN_SUMMARY = null; }
 }
 
 const SCORE_KEY_HTML = `
@@ -467,11 +503,142 @@ async function runAnalyze(){
   }catch(e){ msg.textContent = 'Request failed: ' + e.message; }
 }
 
+/* ============================================================================
+   ONCHAIN TAB
+   ========================================================================== */
+const ONCHAIN_WALLET = '0x3414ec2d1c63008e1cda0e2155b7334c446a0025';
+function fmtUsd(v, dp){
+  if(v==null || isNaN(v)) return '—';
+  const n = Number(v), d = dp==null ? 2 : dp;
+  return (n<0?'-$':'$') + Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+}
+function fmtQty(v){
+  if(v==null || isNaN(v)) return '—';
+  const n = Math.abs(Number(v));
+  if(n>=1e9) return (n/1e9).toFixed(2)+'B';
+  if(n>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(n>=1e3) return Number(v).toLocaleString(undefined,{maximumFractionDigits:0});
+  if(n>=1)   return Number(v).toLocaleString(undefined,{maximumFractionDigits:2});
+  return Number(v).toPrecision(3);
+}
+function fmtPx(v){
+  if(v==null || isNaN(v)) return '—';
+  const n = Math.abs(Number(v));
+  return '$' + (n>=1 ? n.toLocaleString(undefined,{maximumFractionDigits:2})
+    : n>=0.01 ? n.toFixed(4) : n.toPrecision(2));
+}
+function fmtPct1(v){ return v==null||isNaN(v) ? '—' : (v>=0?'+':'')+Number(v).toFixed(1)+'%'; }
+const CHAIN_LABEL = {ethereum:'ETH', 'binance-smart-chain':'BSC', bsc:'BSC', polygon:'POL', base:'Base',
+  arbitrum:'ARB', optimism:'OP'};
+function chainLabel(c){ return CHAIN_LABEL[c] || (c ? c.slice(0,6) : '—'); }
+
+const OC_HOLD_COLS = ['Token','Chain','Qty','Price','Value','Avg entry','Unreal. P&L','%'];
+const OC_TRADE_COLS = [
+  {k:'symbol', label:'Token'}, {k:'chain', label:'Chain'},
+  {k:'entry_time', label:'Date in'}, {k:'exit_time', label:'Date out'},
+  {k:'entry_price', label:'Price in'}, {k:'exit_price', label:'Price out'},
+  {k:'cost_usd', label:'Size'}, {k:'realized_pnl_usd', label:'P&L'},
+  {k:'return_pct', label:'Return %'}, {k:'hold_days', label:'Days'},
+];
+
+function renderOnchain(){
+  renderOnchainHero();
+  const wEl = document.getElementById('onchainWallet');
+  if(wEl) wEl.textContent = ONCHAIN_WALLET.slice(0,6)+'…'+ONCHAIN_WALLET.slice(-4);
+  const sEl = document.getElementById('syncedOnchain');
+  const last = (ONCHAIN_SUMMARY && ONCHAIN_SUMMARY.synced_at) ||
+    (ONCHAIN_HOLDINGS[0] && ONCHAIN_HOLDINGS[0].synced_at);
+  if(sEl) sEl.textContent = last ? 'synced ' + new Date(last).toLocaleString() : 'awaiting first onchain sync';
+  renderOnchainHoldings();
+  renderOnchainTrades();
+}
+
+function renderOnchainHero(){
+  const s = ONCHAIN_SUMMARY || {};
+  const el = document.getElementById('heroOnchain');
+  if(!el) return;
+  const pnlWin = s.pnl_window_usd, winDays = s.pnl_window_days;
+  const winLbl = winDays ? (winDays>=360 ? '~1 yr' : winDays+'d') + ' rolling' : 'rolling';
+  el.innerHTML = `
+    <div class="stat"><div class="stat-label">Portfolio Value</div>
+      <div class="stat-val mono">${fmtUsd(s.portfolio_value_usd)}</div>
+      <div class="stat-sub">${ONCHAIN_HOLDINGS.length} holdings</div></div>
+    <div class="stat"><div class="stat-label">P&amp;L (${winLbl})</div>
+      <div class="stat-val mono ${pnlWin>=0?'pos':'neg'}">${fmtUsd(pnlWin)}</div>
+      <div class="stat-sub">${s.pnl_window_start||''}${s.pnl_window_end?' → '+s.pnl_window_end:''}</div></div>
+    <div class="stat"><div class="stat-label">Round-trip Trades</div>
+      <div class="stat-val mono">${s.trade_count!=null?s.trade_count:'—'}</div>
+      <div class="stat-sub">realized ${fmtUsd(s.realized_pnl_all_usd)}${s.unmatched_activity?` · ${s.unmatched_activity} unmatched`:''}</div></div>
+    <div class="stat"><div class="stat-label">Capital in Coins</div>
+      <div class="stat-val mono">${fmtUsd(s.value_in_coins_usd)}</div>
+      <div class="stat-sub">volatile positions</div></div>
+    <div class="stat"><div class="stat-label">Capital in USD Stables</div>
+      <div class="stat-val mono">${fmtUsd(s.value_in_stables_usd)}</div>
+      <div class="stat-sub">dry powder</div></div>`;
+}
+
+function renderOnchainHoldings(){
+  document.getElementById('theadOnchainHoldings').innerHTML =
+    OC_HOLD_COLS.map(c=>`<th>${c}</th>`).join('');
+  const body = document.getElementById('rowsOnchainHoldings');
+  const rows = ONCHAIN_HOLDINGS.filter(h=>!h.is_spam)
+    .slice().sort((a,b)=>(b.value_usd||0)-(a.value_usd||0));
+  if(!rows.length){ body.innerHTML = `<tr><td class="empty" colspan="${OC_HOLD_COLS.length}">No onchain holdings yet — run the onchain sync.</td></tr>`; return; }
+  body.innerHTML = rows.map(h=>`<tr>
+    <td class="sym">${h.symbol||'?'}${h.is_stablecoin?' <span class="badge">stable</span>':''}</td>
+    <td class="mono" style="color:var(--muted)">${chainLabel(h.chain)}</td>
+    <td class="mono" style="color:var(--muted)">${fmtQty(h.quantity)}</td>
+    <td class="mono" style="color:var(--muted)">${fmtPx(h.price)}</td>
+    <td class="mono">${fmtUsd(h.value_usd)}</td>
+    <td class="mono" style="color:var(--muted)">${h.is_stablecoin?'—':fmtPx(h.avg_entry_price)}</td>
+    <td class="mono ${h.unrealized_pnl_usd>=0?'pos':'neg'}">${h.is_stablecoin?'—':fmtUsd(h.unrealized_pnl_usd)}</td>
+    <td class="mono ${h.unrealized_pnl_pct>=0?'pos':'neg'}">${h.is_stablecoin?'—':fmtPct1(h.unrealized_pnl_pct)}</td>
+  </tr>`).join('');
+}
+
+function renderOnchainTrades(){
+  document.getElementById('theadOnchainTrades').innerHTML = OC_TRADE_COLS.map(c=>{
+    const active = sortOnchain.key===c.k;
+    const arrow = active ? (sortOnchain.dir===1?'▲':'▼') : '';
+    return `<th onclick="sortOnchainBy('${c.k}')" class="${active?'sorted':''}">${c.label}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
+  const body = document.getElementById('rowsOnchainTrades');
+  let rows = ONCHAIN_TRADES.slice().sort((a,b)=>{
+    let av=a[sortOnchain.key], bv=b[sortOnchain.key];
+    if(av==null) av = typeof bv==='string' ? '' : -Infinity;
+    if(bv==null) bv = typeof av==='string' ? '' : -Infinity;
+    return (typeof av==='string' ? av.localeCompare(bv) : av-bv) * sortOnchain.dir;
+  });
+  if(!rows.length){ body.innerHTML = `<tr><td class="empty" colspan="${OC_TRADE_COLS.length}">No round-trip trades yet.</td></tr>`;
+    document.getElementById('loadMoreOnchain').style.display='none'; return; }
+  const shown = rows.slice(0, visibleOnchain);
+  body.innerHTML = shown.map(t=>`<tr>
+    <td class="sym">${t.symbol||'?'}${t.partial?' <span class="badge" title="partial close / token rotation">part</span>':''}</td>
+    <td class="mono" style="color:var(--muted)">${chainLabel(t.chain)}</td>
+    <td class="mono">${fmtDateShort(t.entry_time)}</td>
+    <td class="mono">${fmtDateShort(t.exit_time)}</td>
+    <td class="mono" style="color:var(--muted)">${fmtPx(t.entry_price)}</td>
+    <td class="mono" style="color:var(--muted)">${fmtPx(t.exit_price)}</td>
+    <td class="mono" style="color:var(--muted)">${fmtUsd(t.cost_usd,0)}</td>
+    <td class="mono ${t.realized_pnl_usd>=0?'pos':'neg'}">${fmtUsd(t.realized_pnl_usd)}</td>
+    <td class="mono ${t.return_pct>=0?'pos':'neg'}">${fmtPct1(t.return_pct)}</td>
+    <td class="mono" style="color:var(--muted)">${t.hold_days!=null?Math.round(t.hold_days)+'d':'—'}</td>
+  </tr>`).join('');
+  const more = document.getElementById('loadMoreOnchain');
+  more.style.display = rows.length > visibleOnchain ? '' : 'none';
+}
+function sortOnchainBy(k){
+  if(sortOnchain.key===k) sortOnchain.dir *= -1;
+  else sortOnchain = {key:k, dir: k==='symbol'||k==='chain' ? 1 : -1};
+  renderOnchainTrades();
+}
+window.sortOnchainBy = sortOnchainBy;
+
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
-  document.getElementById('panel-open').classList.toggle('active', name==='open');
-  document.getElementById('panel-closed').classList.toggle('active', name==='closed');
-  document.getElementById('panel-analyze').classList.toggle('active', name==='analyze');
+  ['open','closed','analyze','onchain'].forEach(p=>
+    document.getElementById('panel-'+p).classList.toggle('active', name===p));
+  if(name==='onchain') renderOnchain();
 }
 window.switchTab = switchTab;
 document.getElementById('anRun').addEventListener('click', runAnalyze);
@@ -1082,7 +1249,9 @@ function renderAll(){
     + (so ? ' · synced ' + so.toLocaleDateString() : '');
   document.getElementById('syncedClosed').textContent =
     CLOSED_RAW.length + ' round trips' + (sc ? ' · synced ' + sc.toLocaleDateString() : '');
+  if(document.getElementById('panel-onchain').classList.contains('active')) renderOnchain();
 }
+document.getElementById('loadMoreOnchain').addEventListener('click', ()=>{ visibleOnchain += 60; renderOnchainTrades(); });
 
 async function init(){
   const { data:{ session:s } } = await db.auth.getSession();
