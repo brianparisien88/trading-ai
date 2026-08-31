@@ -488,18 +488,49 @@ def trend_features(closes: dict, on_iso: str | None) -> dict | None:
     }
 
 
-def classify_setup(f: dict | None) -> str | None:
+def entry_intent(f: dict | None, is_put: bool = False) -> str | None:
+    """
+    "reversal" / "continuation" / "chop" -- the kind of entry this is, read off
+    the chart and framed in the trade's own direction (mirror-image for puts).
+    Same logic as the Strategy-column buckets. A put shorting an overextended
+    top is a *reversal*, exactly like a call bottom-fishing a washed-out low.
+    """
     if not f:
         return None
-    r20 = f.get("ret20") or 0
-    if f["above20"] and f["above50"] and r20 >= 25:
-        return "extended"
-    if f["above20"] and f["above50"] and f["pct_of_range"] >= 70:
-        return "momentum breakout"
-    if f.get("crossed_up_20") or (f["ma10_rising"] and not f["above50"] and f["pct_off_low"] >= 8):
-        return "early reversal / base reclaim"
-    if not f["above20"] and not f["above50"] and r20 <= -8:
-        return "falling knife"
+    poR = f.get("pct_of_range", 50)
+    poR = 100 - poR if is_put else poR                  # 0 = at the fade / bottom-fish extreme
+    with_20 = (not f["above20"]) if is_put else f["above20"]
+    with_50 = (not f["above50"]) if is_put else f["above50"]
+    if poR <= 35 and not with_20:
+        return "reversal"
+    if poR >= 55 and with_20 and with_50:
+        return "continuation"
+    return "chop"
+
+
+def _dir_stretch(f: dict, is_put: bool):
+    """(20-day return, % vs 20-day avg) re-signed so + means 'moved the trade's way'."""
+    r20 = f.get("ret20")
+    move = (-r20 if r20 is not None else None) if is_put else r20
+    raw = ((f["px"] / f["sma20"] - 1) * 100) if f.get("sma20") else 0.0
+    return move, (-raw if is_put else raw)
+
+
+def classify_setup(f: dict | None, is_put: bool = False) -> str | None:
+    if not f:
+        return None
+    intent = entry_intent(f, is_put)
+    move, stretch = _dir_stretch(f, is_put)
+    move = move or 0
+    if intent == "continuation":
+        return "extended trend — chasing" if (move > 35 or stretch > 22) else "continuation — with trend"
+    if intent == "reversal":
+        turning = (f.get("crossed_up_20") or f.get("ma10_rising")) if not is_put else (not f["above20"])
+        if turning:
+            return "reversal — turn confirming"
+        if move < -15 or stretch < -10:
+            return "fade — overextended" if is_put else "bottom-fish — washed out"
+        return "early reversal — no turn yet"
     return "range / no trend"
 
 
@@ -518,7 +549,7 @@ def entry_read(sym, f, setup, strike, put_call, expiry_iso, entry_iso) -> str | 
         d = "up" if f["ret20"] >= 0 else "down"
         parts.append(f"{d.capitalize()} {abs(f['ret20'])}% over 20 days"
                      + (f" (+{f['pct_off_low']}% off the recent low)" if f["pct_off_low"] >= 8 else "") + ".")
-    if f.get("crossed_up_20") and f["sma20"] is not None:
+    if f.get("crossed_up_20") and f["sma20"] is not None and put_call != "P":
         parts.append(f"Just reclaimed its 20-day average (${f['sma20']:.2f})"
                      + (", and back above its 50-day." if f["above50"]
                         else ", still below its 50-day."))
@@ -638,52 +669,87 @@ def pivot_structure(pw: list, entry_iso: str | None) -> str | None:
 
 def setup_score(f: dict | None, structure: str | None, is_put: bool):
     """
-    Static technical score of the entry, outcome-independent. Returns
-    (score:int, reasons:list[str], criteria:dict).
-    Demo v1 factors: pivot structure, not-extended, range position.
+    Static technical score of the entry, outcome-independent, judged against the
+    entry's OWN intent (see entry_intent):
+
+      * continuation -- wants an intact trend with room left; being already
+        stretched the trade's way is a demerit (chasing).
+      * reversal / fade -- wants an exhausted, OVEREXTENDED move sitting at a
+        range extreme, ideally with a turn starting. Here the stretch that hurts
+        a continuation is a *plus*.
+      * chop -- little location edge; scored mildly on where in the range.
+
+    Returns (score:int clamped to -6..+6, reasons:list[str], criteria:dict).
     """
     if not f:
         return None, [], {}
-    s, why, crit = 0, [], {}
+    intent = entry_intent(f, is_put)
+    s, why, crit = 0, [f"{intent} entry"], {"intent": intent, "structure": structure}
 
-    # 1. trend structure (inverted for puts)
     good = "LH/LL" if is_put else "HH/HL"
     bad = "HH/HL" if is_put else "LH/LL"
-    if structure == good:
-        s += 3; why.append(f"{good} structure +3")
-    elif structure == bad:
-        s -= 3; why.append(f"{bad} structure (wrong way) -3")
-    elif structure == "flat":
-        why.append("flat structure 0")
-    else:
-        s -= 1; why.append("choppy / mixed structure -1")
-    crit["structure"] = structure
-
-    # 2. not extended
-    r20 = f.get("ret20")
-    stretch = (f["px"] / f["sma20"] - 1) * 100 if f.get("sma20") else 0
-    extended = (r20 is not None and abs(r20) > 35) or abs(stretch) > 22
-    if extended:
-        s -= 2; why.append(f"extended ({stretch:+.0f}% vs 20-day) -2")
-        crit["not_extended"] = False
-    else:
-        s += 2; why.append("not extended +2")
-        crit["not_extended"] = True
-
-    # 3. range position (room to run)
+    move, stretch = _dir_stretch(f, is_put)
     poR = f.get("pct_of_range", 50)
     poR = 100 - poR if is_put else poR
-    if 25 <= poR <= 88:
-        s += 1; why.append("room in the range +1")
-        crit["range_ok"] = True
-    elif poR > 95:
-        s -= 1; why.append("buying the extreme -1")
-        crit["range_ok"] = False
-    else:
-        crit["range_ok"] = poR >= 12
 
+    if intent == "continuation":
+        if structure == good:
+            s += 3; why.append(f"{good} — trend intact +3"); crit["structure_ok"] = True
+        elif structure == bad:
+            s -= 3; why.append(f"{bad} — trend broken -3"); crit["structure_ok"] = False
+        elif structure == "flat":
+            why.append("flat structure 0")
+        else:
+            s -= 1; why.append("choppy structure -1")
+        if (move is not None and move > 35) or stretch > 22:
+            s -= 2; why.append(f"already ran {stretch:+.0f}% vs 20-day — chasing -2")
+            crit["not_extended"] = False
+        else:
+            s += 2; why.append("not extended — room to run +2"); crit["not_extended"] = True
+        if 55 <= poR <= 90:
+            s += 1; why.append("driving, not blown off +1"); crit["range_ok"] = True
+        elif poR > 96:
+            s -= 1; why.append("buying the blow-off high -1"); crit["range_ok"] = False
+
+    elif intent == "reversal":
+        if (move is not None and move < -15) or stretch < -10:
+            s += 2; why.append(f"stretched {stretch:+.0f}% the wrong way — mean-reversion fuel +2")
+            crit["overextended"] = True
+        else:
+            why.append("no exhaustion yet 0"); crit["overextended"] = False
+        if poR <= 15:
+            s += 2; why.append("at the range extreme +2"); crit["range_ok"] = True
+        elif poR <= 35:
+            s += 1; why.append("near the range extreme +1"); crit["range_ok"] = True
+        else:
+            s -= 1; why.append("not at an extreme — weak reversal location -1"); crit["range_ok"] = False
+        turning = (bool(f.get("crossed_up_20")) or (f.get("ma10_rising") and f.get("pct_off_low", 0) >= 5)) \
+            if not is_put else ((not f["above20"]) and not f.get("ma10_rising"))
+        if turning:
+            s += 2; why.append("turn confirming (MA reclaim / rollover) +2"); crit["turn_signal"] = True
+        else:
+            why.append("no turn yet — early / knife 0"); crit["turn_signal"] = False
+        if structure == bad:
+            s -= 1; why.append(f"{bad} still accelerating -1")
+        elif structure == "flat":
+            s += 1; why.append("basing (flat) +1")
+
+    else:  # chop
+        if poR <= 15:
+            s += 1; why.append("buying near the low +1"); crit["range_ok"] = True
+        elif poR >= 92:
+            s -= 1; why.append("buying near the high -1"); crit["range_ok"] = False
+        if abs(stretch) > 22:
+            s -= 1; why.append("extended in a rangebound tape -1")
+        if structure == good:
+            s += 1; why.append(f"{good} forming +1")
+        elif structure == bad:
+            s -= 1; why.append(f"{bad} forming -1")
+
+    s = max(-6, min(6, s))
     tier = "strong" if s >= 4 else "ok" if s >= 1 else "weak"
-    return s, why, {**crit, "tier": tier}
+    crit["tier"] = tier
+    return s, why, crit
 
 
 def trade_grade(f_in, strike, is_put, entry_iso, expiry_iso, days_held, pnl, ifheld_pct):
@@ -742,7 +808,7 @@ def closed_row(t: dict, now_iso: str, contracts: dict, prices: dict, vix: dict) 
     entry_iso, exit_iso = t.get("entry_time"), t.get("exit_time")
     f_in = trend_features(closes, entry_iso)
     f_out = trend_features(closes, exit_iso)
-    setup = classify_setup(f_in)
+    setup = classify_setup(f_in, is_put)
     up_d, held_n, after_rows = hold_stats(closes, entry_iso, exit_iso)
     u_ex = close_on_or_before(closes, exit_iso)
     u_hz = close_on_or_before(closes, hz_iso) if exit_iso else None
