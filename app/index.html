@@ -454,15 +454,25 @@ async function loadData(){
 
   // onchain (independent of the IBKR tables; empty until the first onchain sync)
   try {
-    const [ocH, ocT, ocS] = await Promise.all([
+    const [ocH, ocS] = await Promise.all([
       db.from('onchain_holdings').select('*'),
-      db.from('onchain_trades').select('*'),
       db.from('onchain_summary').select('*').eq('id','current').maybeSingle(),
     ]);
     ONCHAIN_HOLDINGS = (ocH && ocH.data) || [];
-    ONCHAIN_TRADES   = (ocT && ocT.data) || [];
     ONCHAIN_SUMMARY  = (ocS && !ocS.error) ? ocS.data : null;
+    ONCHAIN_TRADES   = await fetchAllRows('onchain_trades', '*');   // paginate past the 1000-row cap
   } catch(e){ ONCHAIN_HOLDINGS = []; ONCHAIN_TRADES = []; ONCHAIN_SUMMARY = null; }
+}
+async function fetchAllRows(table, sel){
+  const out = []; let from = 0;
+  for(;;){
+    const { data, error } = await db.from(table).select(sel).range(from, from+999);
+    if(error) throw error;
+    out.push(...(data||[]));
+    if(!data || data.length < 1000) break;
+    from += 1000;
+  }
+  return out;
 }
 
 const SCORE_KEY_HTML = `
@@ -583,14 +593,13 @@ function renderOnchain(){
 function renderOnchainTradesRibbon(){
   const el = document.getElementById('heroOnchainDist');
   if(!el) return;
-  const T = ONCHAIN_TRADES, s = ONCHAIN_SUMMARY || {};
-  const pnl = t => Number(t.realized_pnl_usd)||0;
-  const total = T.reduce((a,t)=>a+pnl(t),0);
-  const n = T.length;
-  const bigW = T.filter(t=>pnl(t)>=200).length;
-  const bigL = T.filter(t=>pnl(t)<=-200).length;
-  const smW  = T.filter(t=>{const p=pnl(t); return p>0 && p<50;}).length;
-  const smL  = T.filter(t=>{const p=pnl(t); return p<0 && p>-50;}).length;
+  const s = ONCHAIN_SUMMARY || {};
+  const num = (v, f) => (v==null ? f : Number(v));
+  const n = num(s.trade_count, ONCHAIN_TRADES.length);
+  const total = num(s.realized_matched_usd,
+    ONCHAIN_TRADES.reduce((a,t)=>a+(Number(t.realized_pnl_usd)||0),0));
+  const bigW = num(s.big_winners_count, '—'), bigL = num(s.big_losers_count, '—');
+  const smW  = num(s.small_winners_count, '—'), smL = num(s.small_losers_count, '—');
   const gas = Number(s.gas_fees_usd)||0, fric = Number(s.swap_friction_usd)||0;
   const fees = gas + fric;
   const tile = (label, val, cls, sub) => `

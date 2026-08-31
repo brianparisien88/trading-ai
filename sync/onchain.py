@@ -463,6 +463,11 @@ def build(wallet: str, chains: str, now_iso: str):
         win_end = datetime.fromtimestamp(pts[-1][0], timezone.utc).date().isoformat()
         win_days = round((pts[-1][0] - pts[0][0]) / 86400)
     realized_matched = round(sum(t["realized_pnl_usd"] or 0 for t in trades), 2)
+    _p = [t["realized_pnl_usd"] or 0 for t in trades]
+    big_w = sum(1 for x in _p if x >= 200)
+    big_l = sum(1 for x in _p if x <= -200)
+    small_w = sum(1 for x in _p if 0 < x < 50)
+    small_l = sum(1 for x in _p if -50 < x < 0)
 
     gas_fees = round(sum(s.get("fee_usd") or 0 for s in swaps), 2)
     friction = 0.0
@@ -491,6 +496,10 @@ def build(wallet: str, chains: str, now_iso: str):
         "unmatched_activity": unmatched,
         "gas_fees_usd": gas_fees,
         "swap_friction_usd": friction,
+        "big_winners_count": big_w,
+        "big_losers_count": big_l,
+        "small_winners_count": small_w,
+        "small_losers_count": small_l,
         "synced_at": now_iso,
     }
     return holdings, trades, summary
