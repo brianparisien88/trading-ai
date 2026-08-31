@@ -90,8 +90,10 @@ API was deliberately not used. The dashboard labels the "as of" date on the Open
   on a zero-row fetch that normally has rows; stale-row cleanup runs only on
   tables written that run; transient failures (rate limit / 5xx / empty) raise
   `TransientError` → exit 0, tables untouched. See `docs/BUILD-PLAYBOOK.md` §3.
-- **Branch → PR → merge. No pushing to `main`.** `pr-checks.yml` (deterministic
-  gates) + `pr-review.md` (gh-aw independent review, advisory only) run on every PR.
+- **Branch → PR → merge. No pushing to `main`.** `pr-checks.yml` runs deterministic
+  gates on every PR (free). For a review, ask Claude Code / `/code-review` to look
+  at the branch before merge — the gh-aw auto-reviewer is documented in
+  `docs/BUILD-PLAYBOOK.md` §5 but deliberately not installed (needs paid API key).
 - After any migration: `python sync/schema_snapshot.py` and commit
   `docs/schema-snapshot.json` (CI fails the PR if it's stale) + note new
   tables/columns here.

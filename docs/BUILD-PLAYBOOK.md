@@ -103,27 +103,33 @@ external source(s)  ──►  sync job (Python, GitHub Actions cron)  ──►
 ## 5. Git & CI discipline
 
 - **Branch → PR → merge. No pushing to `main`.** (We learned this the hard way.)
-- `pr-checks.yml` — deterministic gates, ~free: code compiles, schema snapshot
-  current, diff scanned for unguarded destructive ops.
-- `pr-review.md` — a gh-aw agentic review: a **fresh** Claude session, no memory
-  of the authoring session, checks destructive ops / fail-safe behaviour / diff
-  matches description / secrets / idempotency. Advisory only — never approves or
-  merges. `safe-outputs` only, no write token to the agent.
+- `pr-checks.yml` — deterministic gates, **free, no API key**: code compiles,
+  schema snapshot current, diff scanned for unguarded destructive ops. This is
+  the part that earns its keep on a solo repo — keep it.
+- **Independent review:** for a solo dev who's in the loop, just ask Claude Code
+  (or `/code-review`) to review the branch before merging — uses your existing
+  subscription, you decide when it's worth it. A fresh session with no memory of
+  the authoring work is genuinely independent for logic/safety bugs.
+- **Only** automate that review (gh-aw `pr-review.md`, triggered on every PR)
+  when you want it hands-off and unattended — it needs a separate pay-as-you-go
+  `ANTHROPIC_API_KEY` (~$1–5/mo) and a spend cap. `safe-outputs: add-comment`
+  only, no write token to the agent, advisory. `gh extension install
+  githubnext/gh-aw` → author `.github/workflows/pr-review.md` → `gh aw compile` →
+  commit the `.lock.yml`. Skip it until the free checks prove insufficient.
 - Pin action versions; let Dependabot bump them.
 - End commit messages with the `Co-Authored-By` trailer.
 
 ## 6. GitHub-side setup checklist (one-time, per repo)
 
-1. Settings → Actions → General → Workflow permissions → **"Allow GitHub Actions
-   to create and approve pull requests"** (needed for `safe-outputs`).
-2. Settings → Secrets and variables → Actions → add `ANTHROPIC_API_KEY` (for
-   gh-aw) + whatever the sync needs (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, …).
-3. Settings → Branches → add a ruleset on `main`: require a PR, require
-   `pr-checks` to pass.
-4. `gh extension install githubnext/gh-aw`, then `gh aw compile` after editing
-   any `.github/workflows/*.md`. Commit the generated `.lock.yml`.
-5. Pages: Settings → Pages → Source = GitHub Actions. `pages.yml` deploys `app/`
+1. Settings → Secrets and variables → Actions → add whatever the sync needs
+   (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, provider tokens, …).
+2. Settings → Branches → add a ruleset on `main`: require a PR, require the
+   `checks` status check to pass.
+3. Pages: Settings → Pages → Source = GitHub Actions. `pages.yml` deploys `app/`
    only.
+4. *(Only if adopting the gh-aw auto-review)* add `ANTHROPIC_API_KEY` secret;
+   Settings → Actions → General → allow Actions to create PRs; `gh extension
+   install githubnext/gh-aw`.
 
 ## 7. What Claude Code should keep in its own memory
 
