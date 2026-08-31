@@ -179,12 +179,16 @@ def fetch_trades(wallet: str, chains: str) -> list[dict]:
                 bought.append(leg)
         if not sold or not bought:
             continue
+        fee = a.get("fee")
+        fee_usd = (fee.get("value") if isinstance(fee, dict)
+                   else fee if isinstance(fee, (int, float)) else None)
         trades.append({
             "hash": a.get("hash"),
             "time": ts,
             "chain": _chain_of(tx),
             "sold": sold,
             "bought": bought,
+            "fee_usd": fee_usd,
         })
     trades.sort(key=lambda t: t["time"] or "")
     return trades
@@ -460,6 +464,15 @@ def build(wallet: str, chains: str, now_iso: str):
         win_days = round((pts[-1][0] - pts[0][0]) / 86400)
     realized_matched = round(sum(t["realized_pnl_usd"] or 0 for t in trades), 2)
 
+    gas_fees = round(sum(s.get("fee_usd") or 0 for s in swaps), 2)
+    friction = 0.0
+    for s in swaps:
+        sv = sum(_leg_value(x) or 0 for x in s["sold"])
+        bv = sum(_leg_value(x) or 0 for x in s["bought"])
+        if sv and bv:
+            friction += sv - bv          # +ve = value lost crossing the swap
+    friction = round(friction, 2)
+
     summary = {
         "id": "current", "wallet": wallet,
         "portfolio_value_usd": round(portfolio_value, 2),
@@ -476,6 +489,8 @@ def build(wallet: str, chains: str, now_iso: str):
                                    if not h["is_stablecoin"] and not h["is_spam"]
                                    and (h["value_usd"] or 0) >= 1),
         "unmatched_activity": unmatched,
+        "gas_fees_usd": gas_fees,
+        "swap_friction_usd": friction,
         "synced_at": now_iso,
     }
     return holdings, trades, summary
