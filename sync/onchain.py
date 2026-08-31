@@ -43,10 +43,13 @@ STABLES = {
     "PYUSD", "FDUSD", "USDD", "CRVUSD", "LUSD", "SUSD", "USDBC", "BUSD",
     "BSC-USD", "USDC.E", "USDT.E", "USDB", "GHO", "USD1",
 }
-# Only the true gas tokens are cash-like (you spend them to trade; wrap/unwrap
-# isn't a "trade" op so it's invisible anyway). WETH / WBNB are regular tokens
-# and get FIFO cost basis like any other position.
-NATIVE = {"ETH", "BNB"}
+# Cash-like legs: used to price a swap and to tell "buy" from "sell", but never
+# turned into round-trip trades of their own. This wallet routes constantly
+# through WETH/WBNB, so treating every hop as a taxable WETH event produces
+# nonsense P&L. Instead WETH/WBNB carry a running inventory (TRACK_INV) so the
+# *current* holding still gets a real weighted-average cost basis.
+NATIVE = {"ETH", "BNB", "WETH", "WBNB"}
+TRACK_INV = {"WETH", "WBNB"}
 
 
 def _hdr():
@@ -225,8 +228,33 @@ def match_trades(swaps: list[dict]):
     open_lots: { key: [ {qty, cost_usd, entry_time, entry_tx, entry_kind, symbol, name, chain, address} ] }
     """
     lots: dict[str, list] = {}
+    inv: dict[str, list] = {}          # WETH/WBNB running inventory (cost basis only)
     rows: list[dict] = []
     unmatched = 0
+
+    def inv_add(leg, usd, ts):
+        if not leg["qty"] or leg["qty"] <= 0:
+            return
+        k = _key(leg["chain"], leg["address"], leg["symbol"])
+        inv.setdefault(k, []).append({
+            "qty": leg["qty"], "cost_usd": usd or 0.0, "entry_time": ts,
+            "symbol": leg["symbol"], "name": leg["name"],
+            "chain": leg["chain"], "address": leg["address"],
+        })
+
+    def inv_take(leg):
+        k = _key(leg["chain"], leg["address"], leg["symbol"])
+        q = inv.get(k) or []
+        left = leg["qty"]
+        while left > 1e-18 and q:
+            lot = q[0]
+            take = min(left, lot["qty"])
+            frac = take / lot["qty"] if lot["qty"] else 0
+            lot["cost_usd"] -= lot["cost_usd"] * frac
+            lot["qty"] -= take
+            left -= take
+            if lot["qty"] <= 1e-18:
+                q.pop(0)
 
     def open_lot(leg, cost_usd, ts, tx, kind):
         if not leg["qty"] or leg["qty"] <= 0:
@@ -283,6 +311,14 @@ def match_trades(swaps: list[dict]):
         bought_val = sum(_leg_value(x) or 0 for x in s["bought"]) or None
         swap_val = sold_val or bought_val
 
+        # keep WETH/WBNB inventory current (no realized rows)
+        for b in s["bought"]:
+            if b["symbol"] in TRACK_INV:
+                inv_add(b, _leg_value(b) or swap_val, ts)
+        for so in s["sold"]:
+            if so["symbol"] in TRACK_INV:
+                inv_take(so)
+
         if sold_cash and not bought_cash:
             # cash -> token(s): open each bought leg, cost split by leg value
             for b in s["bought"]:
@@ -309,7 +345,7 @@ def match_trades(swaps: list[dict]):
                 open_lot(b, _leg_value(b) or swap_val, ts, tx, "token->token")
         # cash<->cash (stable rotations) -> ignore
 
-    return rows, lots, unmatched
+    return rows, lots, unmatched, inv
 
 
 def _days(a_iso: str | None, b_iso: str | None):
@@ -338,7 +374,7 @@ def build(wallet: str, chains: str, now_iso: str):
     chart = fetch_year_chart(wallet, chains)
     log(f"  {len(positions)} positions, {len(swaps)} swap txns")
 
-    trade_rows, open_lots, unmatched = match_trades(swaps)
+    trade_rows, open_lots, unmatched, weth_inv = match_trades(swaps)
 
     # drop FIFO dust slices: negligible cost AND negligible realized P&L
     DUST = 1.0
@@ -347,7 +383,7 @@ def build(wallet: str, chains: str, now_iso: str):
 
     # ---- holdings: Zerion live position is truth for value; our lots give cost basis
     lot_by_key = {}
-    for k, q in open_lots.items():
+    for k, q in list(open_lots.items()) + list(weth_inv.items()):
         tot_q = sum(l["qty"] for l in q)
         tot_c = sum(l["cost_usd"] for l in q)
         first = min((l["entry_time"] for l in q if l["entry_time"]), default=None)
