@@ -51,6 +51,22 @@ STABLES = {
 NATIVE = {"ETH", "BNB", "WETH", "WBNB"}
 TRACK_INV = {"WETH", "WBNB"}
 
+# Tokens with deep, reliably-oracled prices. Only swaps where BOTH legs are
+# "trusted" (stable / native / blue-chip / Zerion-verified) give a clean read on
+# execution spread -- everything else is polluted by thin-token price noise.
+BLUECHIP = {
+    "WBTC", "BTCB", "CBBTC", "TBTC", "SOL", "WSOL", "MSOL", "JITOSOL",
+    "MATIC", "POL", "AVAX", "WAVAX", "LINK", "UNI", "AAVE", "LDO", "MKR",
+    "ARB", "OP", "CRV", "PENDLE", "ENA", "MORPHO", "ONDO", "ADA", "XRP",
+    "DOGE", "SHIB", "PEPE", "TRX", "DOT", "ATOM", "NEAR", "LTC", "BCH",
+    "CAKE", "GALA",
+}
+
+
+def _trusted(leg: dict) -> bool:
+    s = (leg.get("symbol") or "").upper()
+    return is_cashlike(s) or s in BLUECHIP or bool(leg.get("verified"))
+
 
 def _hdr():
     key = os.environ.get("ZERION_API_KEY") or die("ZERION_API_KEY not set")
@@ -101,6 +117,7 @@ def _fung(attr: dict) -> dict:
         "name": fi.get("name"),
         "address": (impl.get("address") or "").lower() or None,
         "chain": impl.get("chain_id"),
+        "verified": bool((fi.get("flags") or {}).get("verified")),
     }
 
 
@@ -172,6 +189,7 @@ def fetch_trades(wallet: str, chains: str) -> list[dict]:
                 "qty": abs(float(tr.get("quantity", {}).get("float") or 0) or 0),
                 "usd": tr.get("value"),
                 "price": tr.get("price"),
+                "verified": f["verified"],
             }
             if tr.get("direction") == "out":
                 sold.append(leg)
@@ -470,13 +488,38 @@ def build(wallet: str, chains: str, now_iso: str):
     small_l = sum(1 for x in _p if -50 < x < 0)
 
     gas_fees = round(sum(s.get("fee_usd") or 0 for s in swaps), 2)
-    friction = 0.0
+
+    # --- execution spread (bid/ask + slippage + LP fee), de-noised ---------
+    # per swap: value given up minus value received. Zerion prices thin tokens
+    # unreliably, so: (1) clamp each swap to a plausible band, (2) trust only
+    # swaps where both legs are well-priced, measure the spread rate there, and
+    # apply that rate to total volume.
+    f_raw = f_clamped = clean_fric = clean_vol = all_vol = 0.0
+    n_clamped = n_clean = n_priced = 0
+    LO, HI = -0.03, 0.12                     # a swap can't really cost <-3% or >12%
     for s in swaps:
         sv = sum(_leg_value(x) or 0 for x in s["sold"])
         bv = sum(_leg_value(x) or 0 for x in s["bought"])
-        if sv and bv:
-            friction += sv - bv          # +ve = value lost crossing the swap
-    friction = round(friction, 2)
+        if not (sv and bv):
+            continue
+        n_priced += 1
+        vol = (sv + bv) / 2
+        all_vol += vol
+        d = sv - bv
+        f_raw += d
+        dc = max(LO * vol, min(HI * vol, d))
+        if dc != d:
+            n_clamped += 1
+        f_clamped += dc
+        if all(_trusted(x) for x in s["sold"] + s["bought"]):
+            n_clean += 1
+            clean_fric += dc
+            clean_vol += vol
+    clean_rate = (clean_fric / clean_vol) if clean_vol else 0.0
+    friction = round(clean_rate * all_vol, 2)          # rate-from-clean, applied to all volume
+    log(f"  spread: raw ${f_raw:,.0f} | clamped ${f_clamped:,.0f} ({n_clamped} capped) | "
+        f"clean {n_clean}/{n_priced} swaps rate {clean_rate*100:.2f}% -> est ${friction:,.0f} "
+        f"on ${all_vol:,.0f} volume")
 
     summary = {
         "id": "current", "wallet": wallet,
