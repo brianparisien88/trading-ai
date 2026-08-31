@@ -487,14 +487,22 @@ def build(wallet: str, chains: str, now_iso: str):
     small_w = sum(1 for x in _p if 0 < x < 50)
     small_l = sum(1 for x in _p if -50 < x < 0)
 
+    _cut1y = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat().replace("+00:00", "Z")
+    _t1y = [t for t in trades if (t.get("exit_time") or "") >= _cut1y]
+    trade_count_1y = len(_t1y)
+    realized_1y = round(sum(t["realized_pnl_usd"] or 0 for t in _t1y), 2)
+
+    cutoff_1y = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat().replace("+00:00", "Z")
     gas_fees = round(sum(s.get("fee_usd") or 0 for s in swaps), 2)
+    gas_fees_1y = round(sum(s.get("fee_usd") or 0 for s in swaps
+                            if (s.get("time") or "") >= cutoff_1y), 2)
 
     # --- execution spread (bid/ask + slippage + LP fee), de-noised ---------
     # per swap: value given up minus value received. Zerion prices thin tokens
     # unreliably, so: (1) clamp each swap to a plausible band, (2) trust only
     # swaps where both legs are well-priced, measure the spread rate there, and
     # apply that rate to total volume.
-    f_raw = f_clamped = clean_fric = clean_vol = all_vol = 0.0
+    f_raw = f_clamped = f_clamped_1y = clean_fric = clean_vol = all_vol = 0.0
     n_clamped = n_clean = n_priced = 0
     LO, HI = -0.03, 0.12                     # a swap can't really cost <-3% or >12%
     for s in swaps:
@@ -511,12 +519,15 @@ def build(wallet: str, chains: str, now_iso: str):
         if dc != d:
             n_clamped += 1
         f_clamped += dc
+        if (s.get("time") or "") >= cutoff_1y:
+            f_clamped_1y += dc
         if all(_trusted(x) for x in s["sold"] + s["bought"]):
             n_clean += 1
             clean_fric += dc
             clean_vol += vol
     clean_rate = (clean_fric / clean_vol) if clean_vol else 0.0
     friction = round(f_clamped, 2)          # headline: measured, per-swap outliers capped
+    friction_1y = round(f_clamped_1y, 2)
     rate_est = round(clean_rate * all_vol, 2)
     log(f"  spread: raw ${f_raw:,.0f} | clamped ${f_clamped:,.0f} ({n_clamped} capped) | "
         f"clean {n_clean}/{n_priced} swaps rate {clean_rate*100:.2f}% -> ${rate_est:,.0f} "
@@ -547,6 +558,10 @@ def build(wallet: str, chains: str, now_iso: str):
         "big_losers_count": big_l,
         "small_winners_count": small_w,
         "small_losers_count": small_l,
+        "trade_count_1y": trade_count_1y,
+        "realized_1y_usd": realized_1y,
+        "gas_fees_1y_usd": gas_fees_1y,
+        "swap_friction_1y_usd": friction_1y,
         "synced_at": now_iso,
     }
     return holdings, trades, summary

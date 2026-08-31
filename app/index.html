@@ -181,8 +181,10 @@
       <thead><tr id="theadOnchainHoldings"></tr></thead>
       <tbody id="rowsOnchainHoldings"></tbody>
     </table>
-    <div style="font-size:12px; color:var(--muted); margin:22px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Round-trip trades</div>
-    <div class="hero hero8" id="heroOnchainDist" style="margin-bottom:12px;"></div>
+    <div style="font-size:12px; color:var(--muted); margin:22px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Round-trip trades <span style="opacity:.6; font-weight:400;">· all time</span></div>
+    <div class="hero hero8" id="heroOnchainDist"></div>
+    <div style="font-size:11px; color:var(--dim); margin:10px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Rolling 1 year</div>
+    <div class="hero hero4" id="heroOnchainDist1y" style="margin-bottom:12px;"></div>
     <table class="ledger" id="tableOnchainTrades">
       <thead><tr id="theadOnchainTrades"></tr></thead>
       <tbody id="rowsOnchainTrades"></tbody>
@@ -618,6 +620,25 @@ function renderOnchainTradesRibbon(){
     tile('Small Winners <span class="stat-th">&lt; $50</span>', smW, 'pos') +
     tile('Small Losers <span class="stat-th">&lt; $50</span>', smL, 'neg') +
     tile('Total Fees', fmtUsd(fees), 'neg', feeSub);
+
+  // --- rolling 1-year strip (for historical vs past-year comparison) ---
+  const el1 = document.getElementById('heroOnchainDist1y');
+  if(el1){
+    const n1 = num(s.trade_count_1y, null);
+    const p1 = num(s.realized_1y_usd, null);
+    const g1 = Number(s.gas_fees_1y_usd)||0, f1 = Number(s.swap_friction_1y_usd)||0;
+    const fee1 = g1 + f1;
+    const pct = (a,b) => (a!=null && b) ? Math.round(a/b*100)+'% of all-time' : '';
+    el1.innerHTML =
+      tile('Trades <span class="stat-th">1 yr</span>',
+           n1==null?'—':n1.toLocaleString(), '', pct(n1, n)) +
+      tile('P&amp;L <span class="stat-th">1 yr</span>',
+           p1==null?'—':fmtUsd(p1), p1>=0?'pos':'neg', pct(p1, total)) +
+      tile('Avg P&amp;L / Trade <span class="stat-th">1 yr</span>',
+           (n1 && p1!=null)?fmtUsd(p1/n1):'—', (p1>=0?'pos':'neg')) +
+      tile('Fees <span class="stat-th">1 yr</span>',
+           fmtUsd(fee1), 'neg', `gas ${fmtUsd(g1,0)} · spread ${fmtUsd(f1,0)} · ${pct(fee1, fees)}`);
+  }
 }
 
 function renderOnchainHero(){
