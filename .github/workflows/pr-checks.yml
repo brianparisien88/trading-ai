@@ -1,0 +1,54 @@
+name: PR checks
+
+# Deterministic guardrails on every PR. No AI, ~free. The agentic review
+# (pr-review) runs alongside this and is advisory; these are the hard gates.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install -r sync/requirements.txt
+
+      - name: Python compiles
+        run: python -m compileall -q sync
+
+      - name: Schema snapshot is current
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          python sync/schema_snapshot.py
+          if ! git diff --quiet -- docs/schema-snapshot.json; then
+            echo "::error::docs/schema-snapshot.json is stale. Run 'python sync/schema_snapshot.py' and commit it, then update CLAUDE.md / memory for any new tables or columns."
+            git --no-pager diff -- docs/schema-snapshot.json
+            exit 1
+          fi
+          echo "schema snapshot matches the live DB"
+
+      - name: Flag unguarded destructive operations
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          diff="$(git diff "$base".."$head" -- '*.py' '*.sql' '*.ts')"
+          # added lines only, minus comments
+          risky="$(printf '%s\n' "$diff" | grep -E '^\+' | grep -viE '^\+\s*(#|//|--)' \
+                   | grep -iE 'requests\.delete|\.delete\(|DROP TABLE|TRUNCATE|DELETE FROM|delete_not_in' || true)"
+          if [ -n "$risky" ]; then
+            echo "::warning::PR adds destructive DB/file operations — confirm each has a guard (dry-run path, row-count sanity check, or 'only tables written this run'):"
+            printf '%s\n' "$risky"
+          else
+            echo "no new destructive operations in this diff"
+          fi
