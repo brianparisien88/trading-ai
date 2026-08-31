@@ -65,6 +65,8 @@
   table.ledger thead th:hover{color:var(--text);}
   table.ledger thead th.sorted{color:var(--blue);}
   .arrow{font-size:9px; margin-left:3px; opacity:.7;}
+  .copyid{cursor:pointer; white-space:nowrap;}
+  .copyid:hover{color:var(--blue);}
   table.ledger td{padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:middle;}
   table.ledger tbody tr:hover{background:var(--surface);}
   table.ledger tbody tr.main-row{cursor:pointer;}
@@ -183,7 +185,7 @@
       <tbody id="rowsOnchainTrades"></tbody>
     </table>
     <div class="more" id="loadMoreOnchain" style="display:none;">Show more</div>
-    <div class="data-note">Wallet activity from the <strong>Zerion API</strong>, refreshed on the daily sync. A <strong>round-trip trade</strong> pairs a buy of a token (from a stablecoin, ETH/BNB, or another token) against later sells, FIFO. A <strong>token→token</strong> swap closes one position and opens another at the swap's USD value. Partial sells leave the remainder as an open holding. LP, staking, bridging and airdrops are ignored; swaps that don't fit a round-trip are counted as <em>unmatched activity</em>. <strong>Realized P&amp;L</strong> = sum of the matched round-trips below; <strong>all-in</strong> is Zerion's figure which additionally includes gas, ETH/BNB moves, and unattributed flow. <strong>Value change</strong> is the raw portfolio delta over the window and includes any deposits/withdrawals. Holdings show <em>our</em> FIFO cost basis; positions acquired by transfer show no cost. Prices are USD at block time per Zerion; spam tokens filtered by Zerion.</div>
+    <div class="data-note">Wallet activity from the <strong>Zerion API</strong>, refreshed on the daily sync. A <strong>round-trip trade</strong> pairs a buy of a token (from a stablecoin, ETH/BNB, or another token) against later sells, FIFO. A <strong>token→token</strong> swap closes one position and opens another at the swap's USD value. Partial sells leave the remainder as an open holding. LP, staking, bridging and airdrops are ignored; swaps that don't fit a round-trip are counted as <em>unmatched activity</em>. <strong>Realized P&amp;L</strong> = sum of the matched round-trips below; <strong>all-in</strong> is Zerion's figure which additionally includes gas, ETH/BNB moves, and unattributed flow. <strong>Value change</strong> is the raw portfolio delta over the window and includes any deposits/withdrawals. Holdings show <em>our</em> FIFO cost basis; positions acquired by transfer / bridge / wrap show no cost. Positions worth under $3 are hidden. Prices are USD at block time per Zerion; spam tokens filtered by Zerion. Click a Coin ID to copy the contract address.</div>
   </div>
 
   <!-- CLOSED TAB -->
@@ -532,7 +534,28 @@ const CHAIN_LABEL = {ethereum:'ETH', 'binance-smart-chain':'BSC', bsc:'BSC', pol
   arbitrum:'ARB', optimism:'OP'};
 function chainLabel(c){ return CHAIN_LABEL[c] || (c ? c.slice(0,6) : '—'); }
 
-const OC_HOLD_COLS = ['Token','Chain','Qty','Price','Value','Avg entry','Unreal. P&L','%'];
+const OC_HOLD_COLS = [
+  {k:'symbol', label:'Token'}, {k:'chain', label:'Chain'}, {k:'quantity', label:'Qty'},
+  {k:'price', label:'Price'}, {k:'value_usd', label:'Value'},
+  {k:'avg_entry_price', label:'Avg entry'}, {k:'unrealized_pnl_usd', label:'Unreal. P&L'},
+  {k:'unrealized_pnl_pct', label:'%'}, {k:'token_address', label:'Coin ID'},
+];
+const OC_MIN_HOLDING = 3;
+let sortOnchainHold = {key:'value_usd', dir:-1};
+function copyAddr(el){
+  const a = el.dataset.addr; if(!a) return;
+  navigator.clipboard.writeText(a).then(()=>{
+    const old = el.dataset.short;
+    el.firstChild.textContent = 'copied ';
+    setTimeout(()=>{ el.firstChild.textContent = old + ' '; }, 900);
+  }).catch(()=>{});
+}
+window.copyAddr = copyAddr;
+function coinIdCell(addr){
+  if(!addr) return '<span style="color:var(--dim)">native</span>';
+  const short = addr.slice(0,6)+'…'+addr.slice(-4);
+  return `<span class="copyid" data-addr="${addr}" data-short="${short}" onclick="copyAddr(this)" title="${addr} — click to copy">${short} <span style="color:var(--dim)">⧉</span></span>`;
+}
 const OC_TRADE_COLS = [
   {k:'symbol', label:'Token'}, {k:'chain', label:'Chain'},
   {k:'entry_time', label:'Date in'}, {k:'exit_time', label:'Date out'},
@@ -579,11 +602,18 @@ function renderOnchainHero(){
 }
 
 function renderOnchainHoldings(){
-  document.getElementById('theadOnchainHoldings').innerHTML =
-    OC_HOLD_COLS.map(c=>`<th>${c}</th>`).join('');
+  document.getElementById('theadOnchainHoldings').innerHTML = OC_HOLD_COLS.map(c=>{
+    const active = sortOnchainHold.key===c.k;
+    const arrow = active ? (sortOnchainHold.dir===1?'▲':'▼') : '';
+    return `<th onclick="sortOnchainHoldBy('${c.k}')" class="${active?'sorted':''}">${c.label}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
   const body = document.getElementById('rowsOnchainHoldings');
-  const rows = ONCHAIN_HOLDINGS.filter(h=>!h.is_spam)
-    .slice().sort((a,b)=>(b.value_usd||0)-(a.value_usd||0));
+  const rows = ONCHAIN_HOLDINGS.filter(h=>!h.is_spam && (h.value_usd||0) >= OC_MIN_HOLDING).slice().sort((a,b)=>{
+    let av=a[sortOnchainHold.key], bv=b[sortOnchainHold.key];
+    if(av==null) av = typeof bv==='string' ? '' : -Infinity;
+    if(bv==null) bv = typeof av==='string' ? '' : -Infinity;
+    return (typeof av==='string' ? av.localeCompare(bv) : av-bv) * sortOnchainHold.dir;
+  });
   if(!rows.length){ body.innerHTML = `<tr><td class="empty" colspan="${OC_HOLD_COLS.length}">No onchain holdings yet — run the onchain sync.</td></tr>`; return; }
   body.innerHTML = rows.map(h=>`<tr>
     <td class="sym">${h.symbol||'?'}${h.is_stablecoin?' <span class="badge">stable</span>':''}</td>
@@ -594,6 +624,7 @@ function renderOnchainHoldings(){
     <td class="mono" style="color:var(--muted)">${h.is_stablecoin?'—':fmtPx(h.avg_entry_price)}</td>
     <td class="mono ${h.unrealized_pnl_usd>=0?'pos':'neg'}">${h.is_stablecoin?'—':fmtUsd(h.unrealized_pnl_usd)}</td>
     <td class="mono ${h.unrealized_pnl_pct>=0?'pos':'neg'}">${h.is_stablecoin?'—':fmtPct1(h.unrealized_pnl_pct)}</td>
+    <td class="mono">${coinIdCell(h.token_address)}</td>
   </tr>`).join('');
 }
 
@@ -634,6 +665,12 @@ function sortOnchainBy(k){
   renderOnchainTrades();
 }
 window.sortOnchainBy = sortOnchainBy;
+function sortOnchainHoldBy(k){
+  if(sortOnchainHold.key===k) sortOnchainHold.dir *= -1;
+  else sortOnchainHold = {key:k, dir: k==='symbol'||k==='chain'||k==='token_address' ? 1 : -1};
+  renderOnchainHoldings();
+}
+window.sortOnchainHoldBy = sortOnchainHoldBy;
 
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));

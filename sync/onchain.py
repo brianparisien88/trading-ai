@@ -43,7 +43,10 @@ STABLES = {
     "PYUSD", "FDUSD", "USDD", "CRVUSD", "LUSD", "SUSD", "USDBC", "BUSD",
     "BSC-USD", "USDC.E", "USDT.E", "USDB", "GHO", "USD1",
 }
-NATIVE = {"ETH", "WETH", "BNB", "WBNB"}  # treated as cash-like for trade accounting
+# Only the true gas tokens are cash-like (you spend them to trade; wrap/unwrap
+# isn't a "trade" op so it's invisible anyway). WETH / WBNB are regular tokens
+# and get FIFO cost basis like any other position.
+NATIVE = {"ETH", "BNB"}
 
 
 def _hdr():
@@ -351,6 +354,9 @@ def build(wallet: str, chains: str, now_iso: str):
         if tot_q > 1e-15:
             lot_by_key[k] = {"qty": tot_q, "cost": tot_c, "first": first}
 
+    # portfolio totals count every position (Zerion's non-trash set); the table
+    # only lists positions currently worth >= MIN_HOLDING.
+    MIN_HOLDING = 3.0
     holdings, coins_val, stables_val = [], 0.0, 0.0
     for p in positions:
         sym = p["symbol"]
@@ -361,13 +367,12 @@ def build(wallet: str, chains: str, now_iso: str):
         cost = lot["cost"] if lot else None
         avg_entry = (lot["cost"] / lot["qty"]) if (lot and lot["qty"]) else None
         unreal = (val - cost) if (cost is not None and not stable) else None
-        # skip negligible dust: worth < $1 now AND never cost more than $10
-        if val < 1 and (cost or 0) < 10:
-            continue
         if stable:
             stables_val += val
         else:
             coins_val += val
+        if val < MIN_HOLDING:
+            continue
         holdings.append({
             "id": k, "wallet": wallet, "chain": p["chain"], "symbol": sym,
             "name": p["name"], "token_address": p["address"],
@@ -389,7 +394,7 @@ def build(wallet: str, chains: str, now_iso: str):
         trades.append({**r, "id": tid, "wallet": wallet, "synced_at": now_iso})
 
     # ---- summary
-    portfolio_value = sum(h["value_usd"] or 0 for h in holdings)
+    portfolio_value = coins_val + stables_val
     pts = chart.get("points") or []
     win_usd = win_start = win_end = win_days = None
     if len(pts) >= 2:
