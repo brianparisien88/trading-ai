@@ -210,6 +210,9 @@ let sortClosed = {key:'exit_time', dir:-1};
 
 // Strategy dropdown choices for the Trade History journal. Edit this list to change them.
 const STRATEGY_OPTIONS = [
+  "Reversal / bottom-fish",
+  "Continuation",
+  "Chop / range",
   "1M double bottom / 2D double bottom - 8H/45min ready",
   "1M double bottom / 2D HH/HL - 8H/45min ready",
   "1M HH/HL / 2D double bottom - 8H/45min ready",
@@ -795,8 +798,7 @@ function renderTheadClosed(){
   document.getElementById('theadClosed').innerHTML = CLOSED_COLS.map(c => {
     const active = sortClosed.key===c.key;
     const arrow = active ? (sortClosed.dir===1?'▲':'▼') : '';
-    const sortable = c.key !== 'strategy';
-    return `<th class="${active?'sorted':''} ${c.hide?'col-hide':''}" ${sortable?`onclick="sortClosedBy('${c.key}')"`:'style="cursor:default;"'}>${c.label}<span class="arrow">${arrow}</span></th>`;
+    return `<th class="${active?'sorted':''} ${c.hide?'col-hide':''}" onclick="sortClosedBy('${c.key}')">${c.label}<span class="arrow">${arrow}</span></th>`;
   }).join('');
 }
 function sortClosedBy(key){
