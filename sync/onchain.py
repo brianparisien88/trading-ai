@@ -381,6 +381,26 @@ def build(wallet: str, chains: str, now_iso: str):
     trade_rows = [r for r in trade_rows
                   if (r["cost_usd"] or 0) >= DUST or abs(r["realized_pnl_usd"] or 0) >= DUST]
 
+    # WETH/WBNB also leave the wallet via ops we don't fetch (unwrap, bridge,
+    # transfer), so the trade-derived inventory over-counts. Trim each to the
+    # live on-chain balance, keeping the MOST RECENT lots (FIFO throughout: the
+    # earliest WETH was spent first, by trades and by everything else) -> the
+    # cost basis is that of the stake actually still held.
+    pos_qty = {_key(p["chain"], p["address"], p["symbol"]): (p["quantity"] or 0.0)
+               for p in positions}
+    for k, q in list(weth_inv.items()):
+        target = pos_qty.get(k, 0.0)
+        q.sort(key=lambda l: l["entry_time"] or "", reverse=True)   # newest first
+        kept, acc = [], 0.0
+        for lot in q:
+            if acc >= target - 1e-12:
+                break
+            take = min(lot["qty"], target - acc)
+            frac = take / lot["qty"] if lot["qty"] else 0
+            kept.append({**lot, "qty": take, "cost_usd": lot["cost_usd"] * frac})
+            acc += take
+        weth_inv[k] = kept
+
     # ---- holdings: Zerion live position is truth for value; our lots give cost basis
     lot_by_key = {}
     for k, q in list(open_lots.items()) + list(weth_inv.items()):
