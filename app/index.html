@@ -54,6 +54,21 @@
 
   .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap;}
   .synced{font-size:11.5px; color:var(--dim);}
+  .linkbtn{background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px;
+    padding:4px 10px; font-size:12px; cursor:pointer;}
+  .linkbtn:hover{color:var(--text); border-color:var(--muted);}
+  .stratmgr{background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:12px 14px; margin-bottom:12px; max-width:560px;}
+  .stratmgr .srow{display:flex; align-items:center; gap:8px; padding:4px 0; font-size:12.5px;}
+  .stratmgr .srow .lbl{flex:1;}
+  .stratmgr .srow .cnt{color:var(--dim); font-size:11px;}
+  .stratmgr .srow button{background:none; border:0; color:var(--red); cursor:pointer; font-size:13px; padding:2px 6px;}
+  .stratmgr .addrow{display:flex; gap:8px; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;}
+  .stratmgr .addrow input{flex:1; background:var(--surface2); border:1px solid var(--border);
+    color:var(--text); border-radius:6px; padding:6px 9px; font-size:12.5px; outline:none;}
+  .stratmgr .addrow button{background:var(--blue); border:0; color:#fff; border-radius:6px;
+    padding:6px 14px; font-size:12.5px; cursor:pointer;}
+  .stratmgr .mgrnote{font-size:11px; color:var(--dim); margin-top:8px;}
   input.search{background:var(--surface); border:1px solid var(--border); color:var(--text);
     border-radius:7px; padding:7px 10px; font-size:13px; width:160px; outline:none;}
   input.search:focus{border-color:var(--blue);}
@@ -201,9 +216,11 @@
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input class="search" id="searchClosed" placeholder="Filter symbol...">
         <label class="chk"><input type="checkbox" id="filterRecovered"> <span id="recLabel">Recovered cuts</span></label>
+        <button id="stratMgrToggle" class="linkbtn" style="display:none;">⚙ Strategies</button>
       </div>
       <div class="synced" id="syncedClosed"></div>
     </div>
+    <div id="stratMgr" class="stratmgr" style="display:none;"></div>
     <div class="scorekey" id="scoreKeyClosed"></div>
     <table class="ledger" id="tableClosed">
       <thead><tr id="theadClosed"></tr></thead>
@@ -241,20 +258,11 @@ const RECOVERED_PEAK = 15;
 let sortOpen = {key:'unrealized_pnl', dir:1};
 let sortClosed = {key:'exit_time', dir:-1};
 
-// Strategy dropdown choices for the Trade History journal. Edit this list to change them.
-const STRATEGY_OPTIONS = [
-  "Reversal / counter-trend",
-  "Continuation",
-  "Chop / range",
-  "1M double bottom / 2D double bottom - 8H/45min ready",
-  "1M double bottom / 2D HH/HL - 8H/45min ready",
-  "1M HH/HL / 2D double bottom - 8H/45min ready",
-  "1M HH/HL / 2D HH/HL - 8H/45min ready",
-  "2D double bottom - 8H/45min ready",
-  "2D HH/HL - 8H/45min ready",
-  "Relative Strength continuation - bull flag break",
-  "Relative Strength continuation - bottom of range/support line",
-];
+// Strategy dropdown choices for the Trade History journal. Loaded from the
+// strategy_options table in loadData(); a logged-in user manages the list from
+// the Trade History tab (⚙ Strategies). Deleting an option never changes a
+// trade's saved strategy value.
+let STRATEGY_OPTIONS = [];
 function strategyOptionsHTML(current){
   const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   const list = STRATEGY_OPTIONS.slice();
@@ -262,6 +270,67 @@ function strategyOptionsHTML(current){
   if(current && !list.includes(current)) list.push(current);
   return `<option value="">--</option>` + list.map(o =>
     `<option value="${esc(o)}" ${current===o?'selected':''}>${esc(o)}</option>`).join('');
+}
+
+/* ---------- editable Strategy list (Trade History → ⚙ Strategies) ---------- */
+async function reloadStrategyOptions(){
+  const { data, error } = await db.from('strategy_options')
+    .select('label').order('sort_order').order('label');
+  if(!error && data) STRATEGY_OPTIONS = data.map(r => r.label);
+}
+function strategyUsageCount(label){
+  let n = 0;
+  for(const t of CLOSED_RAW) if((journalCache[t.id]||{}).strategy === label) n++;
+  for(const o of OPEN_RAW)   if((journalCache[o.id]||{}).strategy === label) n++;
+  return n;
+}
+function renderStratMgr(){
+  const box = document.getElementById('stratMgr');
+  if(!box) return;
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const rows = STRATEGY_OPTIONS.map((o,i)=>{
+    const c = strategyUsageCount(o);
+    return `<div class="srow"><span class="lbl">${esc(o)}</span>`
+      + `<span class="cnt">${c ? c+' tagged' : ''}</span>`
+      + `<button title="Remove" onclick="removeStrategyOptionAt(${i})">✕</button></div>`;
+  }).join('') || '<div class="srow" style="color:var(--dim)">No options yet — add one below.</div>';
+  box.innerHTML = rows
+    + `<div class="addrow"><input id="stratNew" placeholder="New strategy label" maxlength="120">`
+    + `<button onclick="addStrategyOption()">Add</button></div>`
+    + `<div class="mgrnote">Saves immediately. Removing an option never re-tags a trade already using it — that label keeps showing on its own dropdown.</div>`;
+  const inp = document.getElementById('stratNew');
+  if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter') addStrategyOption(); });
+}
+async function addStrategyOption(){
+  const inp = document.getElementById('stratNew');
+  const label = (inp && inp.value || '').trim();
+  if(!label){ return; }
+  if(STRATEGY_OPTIONS.includes(label)){ inp.value=''; return; }
+  const nextOrder = 200 + STRATEGY_OPTIONS.length * 10;
+  const { error } = await db.from('strategy_options').insert({ label, sort_order: nextOrder });
+  if(error){ alert('Could not add: ' + error.message); return; }
+  await reloadStrategyOptions();
+  renderStratMgr(); renderRowsClosed(); renderRowsOpen();
+}
+async function removeStrategyOptionAt(i){
+  const label = STRATEGY_OPTIONS[i];
+  if(label == null) return;
+  const c = strategyUsageCount(label);
+  const extra = c ? `\n\n${c} trade(s) are tagged with it — they keep the label; it just won't be offered for new trades.` : '';
+  if(!confirm(`Remove "${label}" from the Strategy list?${extra}`)) return;
+  const { error } = await db.from('strategy_options').delete().eq('label', label);
+  if(error){ alert('Could not remove: ' + error.message); return; }
+  await reloadStrategyOptions();
+  renderStratMgr(); renderRowsClosed(); renderRowsOpen();
+}
+window.addStrategyOption = addStrategyOption;
+window.removeStrategyOptionAt = removeStrategyOptionAt;
+function syncStratMgr(){
+  const btn = document.getElementById('stratMgrToggle');
+  const box = document.getElementById('stratMgr');
+  if(!btn || !box) return;
+  btn.style.display = canEdit() ? '' : 'none';
+  if(!canEdit()) box.style.display = 'none';
 }
 
 /* ---------- helpers ---------- */
@@ -426,7 +495,7 @@ function mapClosed(r){
 /* ---------- data load ---------- */
 async function loadData(){
   hideBanner();
-  const [openRes, closedRes, acctRes] = await Promise.all([
+  const [openRes, closedRes, acctRes, stratRes] = await Promise.all([
     db.from('open_positions').select('*'),
     // price_window is bulky and only needed on row-expand — fetched lazily then
     db.from('closed_trades').select(
@@ -438,9 +507,11 @@ async function loadData(){
       'setup_structure,setup_score,setup_reasons,setup_criteria,trade_grade,grade_points,grade_reasons,' +
       'trade_seq,synced_at,strategy,journal_thoughts,planned_stop,planned_target'),
     db.from('account_summary').select('*').eq('id', 'current').maybeSingle(),
+    db.from('strategy_options').select('label').order('sort_order').order('label'),
   ]);
   if(openRes.error)   throw new Error('open_positions: ' + openRes.error.message);
   if(closedRes.error) throw new Error('closed_trades: ' + closedRes.error.message);
+  if(stratRes && !stratRes.error && stratRes.data) STRATEGY_OPTIONS = stratRes.data.map(r => r.label);
   ACCOUNT = acctRes && !acctRes.error ? acctRes.data : null;  // may be null until first sync with NAV/Cash sections
   OPEN_RAW = (openRes.data || []).map(mapOpen);
   CLOSED_RAW = (closedRes.data || []).map(mapClosed);
@@ -1335,16 +1406,24 @@ document.getElementById('loadMore').addEventListener('click', ()=>{ visibleClose
 document.getElementById('searchClosed').addEventListener('input', (e)=>{ filterClosed = e.target.value; visibleClosed = PAGE; renderRowsClosed(); });
 document.getElementById('filterRecovered').addEventListener('change', (e)=>{ onlyRecovered = e.target.checked; visibleClosed = PAGE; renderRowsClosed(); });
 document.getElementById('searchOpen').addEventListener('input', (e)=>{ filterOpen = e.target.value; renderRowsOpen(); });
+document.getElementById('stratMgrToggle').addEventListener('click', ()=>{
+  const box = document.getElementById('stratMgr');
+  const show = box.style.display === 'none';
+  box.style.display = show ? '' : 'none';
+  if(show) renderStratMgr();
+});
 
 db.auth.onAuthStateChange((_event, s)=>{
   session = s;
   renderAuth();
+  syncStratMgr();
   refreshOpenEditors();
 });
 
 function renderAll(){
   renderHeroOpen(); renderTheadOpen(); renderRowsOpen();
   renderHeroClosed(); renderTheadClosed(); renderRowsClosed();
+  syncStratMgr();
   const recN = CLOSED_RAW.filter(t=>t.recovered).length;
   document.getElementById('recLabel').textContent = `Recovered cuts (${recN})`;
   const so = latestSync(OPEN_RAW), sc = latestSync(CLOSED_RAW);

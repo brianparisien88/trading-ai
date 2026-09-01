@@ -36,9 +36,12 @@ daily ETL. The IBKR MCP connector is **not** used by the sync.
   the client HTML) and `sb_secret_...` (= service_role, bypasses RLS, server-only).
   Do **not** use `anon`/`service_role` naming or pre-2026 client patterns.
 - Tables: `closed_trades` (PK `id` = `{entry_order}_{exit_order}_{n}`, stable),
-  `open_positions` (PK `open_{conid}`), `account_summary` (single row, id `current`).
+  `open_positions` (PK `open_{conid}`), `account_summary` (single row, id `current`),
+  `onchain_*` (Zerion wallet), `strategy_options` (Trade History dropdown list —
+  public read, authenticated CRUD; edited from the site via ⚙ Strategies).
 - RLS on all: public `SELECT`; no client writes except the 4 journal columns on
-  `closed_trades` for signed-in users (column GRANT + UPDATE policy).
+  `closed_trades`/`open_positions` for signed-in users (column GRANT + UPDATE
+  policy) and full CRUD on `strategy_options` for signed-in users.
 
 ## IBKR Flex Web Service
 
