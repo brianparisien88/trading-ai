@@ -216,11 +216,9 @@
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input class="search" id="searchClosed" placeholder="Filter symbol...">
         <label class="chk"><input type="checkbox" id="filterRecovered"> <span id="recLabel">Recovered cuts</span></label>
-        <button id="stratMgrToggle" class="linkbtn" style="display:none;">⚙ Strategies</button>
       </div>
       <div class="synced" id="syncedClosed"></div>
     </div>
-    <div id="stratMgr" class="stratmgr" style="display:none;"></div>
     <div class="scorekey" id="scoreKeyClosed"></div>
     <table class="ledger" id="tableClosed">
       <thead><tr id="theadClosed"></tr></thead>
@@ -272,7 +270,11 @@ function strategyOptionsHTML(current){
     `<option value="${esc(o)}" ${current===o?'selected':''}>${esc(o)}</option>`).join('');
 }
 
-/* ---------- editable Strategy list (Trade History → ⚙ Strategies) ---------- */
+/* ---------- editable Strategy list — inline in the journal editor ----------
+   A "＋ add / manage list" toggle sits under every Strategy <select> (Open
+   Trades + Trade History) when signed in. Add/remove hit strategy_options
+   (RLS: authenticated CRUD). Changes re-render every strategy <select> on the
+   page in place, preserving each one's current selection. */
 async function reloadStrategyOptions(){
   const { data, error } = await db.from('strategy_options')
     .select('label').order('sort_order').order('label');
@@ -284,53 +286,72 @@ function strategyUsageCount(label){
   for(const o of OPEN_RAW)   if((journalCache[o.id]||{}).strategy === label) n++;
   return n;
 }
-function renderStratMgr(){
-  const box = document.getElementById('stratMgr');
-  if(!box) return;
+// The Strategy field block for a journal editor: label + select + (signed-in) manager.
+function strategyFieldHTML(current, id){
+  const dis = canEdit() ? '' : 'disabled';
+  const idAttr = id != null ? ` data-id="${id}"` : '';
+  return `<div class="field strat-field">
+      <label>Strategy</label>
+      <select data-field="strategy"${idAttr} ${dis}>${strategyOptionsHTML(current)}</select>
+      ${canEdit() ? `<button type="button" class="linkbtn strat-open" style="margin-top:6px;font-size:11px;">＋ add / manage list</button>
+        <div class="stratmgr strat-inline" style="display:none;margin-top:8px;"></div>` : ''}
+    </div>`;
+}
+// wire the "＋ add / manage list" toggle inside a just-rendered editor cell
+function wireStrategyField(cellEl){
+  const open = cellEl.querySelector('.strat-open');
+  if(!open) return;
+  open.addEventListener('click', ()=>{
+    const p = cellEl.querySelector('.strat-inline');
+    const show = p.style.display === 'none';
+    p.style.display = show ? '' : 'none';
+    open.textContent = show ? '× close list' : '＋ add / manage list';
+    if(show) renderStratInline(p);
+  });
+}
+function renderStratInline(panel){
   const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const rows = STRATEGY_OPTIONS.map((o,i)=>{
-    const c = strategyUsageCount(o);
-    return `<div class="srow"><span class="lbl">${esc(o)}</span>`
-      + `<span class="cnt">${c ? c+' tagged' : ''}</span>`
-      + `<button title="Remove" onclick="removeStrategyOptionAt(${i})">✕</button></div>`;
-  }).join('') || '<div class="srow" style="color:var(--dim)">No options yet — add one below.</div>';
-  box.innerHTML = rows
-    + `<div class="addrow"><input id="stratNew" placeholder="New strategy label" maxlength="120">`
-    + `<button onclick="addStrategyOption()">Add</button></div>`
+  panel.innerHTML = (STRATEGY_OPTIONS.map((o,i)=>{
+      const c = strategyUsageCount(o);
+      return `<div class="srow"><span class="lbl">${esc(o)}</span>`
+        + `<span class="cnt">${c ? c+' tagged' : ''}</span>`
+        + `<button type="button" title="Remove" data-rm="${i}">✕</button></div>`;
+    }).join('') || '<div class="srow" style="color:var(--dim)">No options yet.</div>')
+    + `<div class="addrow"><input class="strat-new" placeholder="New strategy label" maxlength="120">`
+    + `<button type="button" class="strat-add">Add</button></div>`
     + `<div class="mgrnote">Saves immediately. Removing an option never re-tags a trade already using it — that label keeps showing on its own dropdown.</div>`;
-  const inp = document.getElementById('stratNew');
-  if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter') addStrategyOption(); });
+  const add = async ()=>{
+    const inp = panel.querySelector('.strat-new'), label = (inp.value||'').trim();
+    if(!label){ return; }
+    if(STRATEGY_OPTIONS.includes(label)){ inp.value=''; return; }
+    const { error } = await db.from('strategy_options').insert(
+      { label, sort_order: 200 + STRATEGY_OPTIONS.length * 10 });
+    if(error){ alert('Could not add: ' + error.message); return; }
+    inp.value=''; await reloadStrategyOptions(); refreshStrategyUI();
+  };
+  panel.querySelector('.strat-add').addEventListener('click', add);
+  panel.querySelector('.strat-new').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } });
+  panel.querySelectorAll('[data-rm]').forEach(b=> b.addEventListener('click', async ()=>{
+    const label = STRATEGY_OPTIONS[+b.dataset.rm];
+    if(label == null) return;
+    const c = strategyUsageCount(label);
+    const extra = c ? `\n\n${c} trade(s) keep the label; it just won't be offered for new trades.` : '';
+    if(!confirm(`Remove "${label}" from the Strategy list?${extra}`)) return;
+    const { error } = await db.from('strategy_options').delete().eq('label', label);
+    if(error){ alert('Could not remove: ' + error.message); return; }
+    await reloadStrategyOptions(); refreshStrategyUI();
+  }));
 }
-async function addStrategyOption(){
-  const inp = document.getElementById('stratNew');
-  const label = (inp && inp.value || '').trim();
-  if(!label){ return; }
-  if(STRATEGY_OPTIONS.includes(label)){ inp.value=''; return; }
-  const nextOrder = 200 + STRATEGY_OPTIONS.length * 10;
-  const { error } = await db.from('strategy_options').insert({ label, sort_order: nextOrder });
-  if(error){ alert('Could not add: ' + error.message); return; }
-  await reloadStrategyOptions();
-  renderStratMgr(); renderRowsClosed(); renderRowsOpen();
-}
-async function removeStrategyOptionAt(i){
-  const label = STRATEGY_OPTIONS[i];
-  if(label == null) return;
-  const c = strategyUsageCount(label);
-  const extra = c ? `\n\n${c} trade(s) are tagged with it — they keep the label; it just won't be offered for new trades.` : '';
-  if(!confirm(`Remove "${label}" from the Strategy list?${extra}`)) return;
-  const { error } = await db.from('strategy_options').delete().eq('label', label);
-  if(error){ alert('Could not remove: ' + error.message); return; }
-  await reloadStrategyOptions();
-  renderStratMgr(); renderRowsClosed(); renderRowsOpen();
-}
-window.addStrategyOption = addStrategyOption;
-window.removeStrategyOptionAt = removeStrategyOptionAt;
-function syncStratMgr(){
-  const btn = document.getElementById('stratMgrToggle');
-  const box = document.getElementById('stratMgr');
-  if(!btn || !box) return;
-  btn.style.display = canEdit() ? '' : 'none';
-  if(!canEdit()) box.style.display = 'none';
+// after any list change: re-render every strategy <select> in place (keeping its
+// selection) and any open inline manager. The saved Strategy column values don't
+// change, so the tables are left alone.
+function refreshStrategyUI(){
+  document.querySelectorAll('select[data-field="strategy"]').forEach(sel=>{
+    const v = sel.value;
+    sel.innerHTML = strategyOptionsHTML(v);
+    sel.value = v;
+  });
+  document.querySelectorAll('.strat-inline').forEach(p=>{ if(p.style.display !== 'none') renderStratInline(p); });
 }
 
 /* ---------- helpers ---------- */
@@ -1135,9 +1156,8 @@ function mountJournalEditor(cellEl, table, id, j){
   const dis = canEdit() ? '' : 'disabled';
   const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;";
   cellEl.innerHTML =
-    (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) + `
-    <div class="field"><label>Strategy</label>
-      <select data-field="strategy" ${dis}>${strategyOptionsHTML(j.strategy)}</select></div>
+    (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) +
+    strategyFieldHTML(j.strategy) + `
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
       <div class="field"><label>Planned Stop ($)</label>
         <input type="number" step="0.01" data-field="stop" value="${j.stop||''}" ${dis} style="${inputStyle}"></div>
@@ -1148,7 +1168,8 @@ function mountJournalEditor(cellEl, table, id, j){
       <textarea data-field="thoughts" placeholder="Thesis, plan, what would change your mind..." ${dis}>${j.thoughts||''}</textarea></div>
     <div class="save-note" data-note>${canEdit() ? 'Autosaves as you type' : ''}</div>`;
   if(!canEdit()) return;
-  cellEl.querySelectorAll('textarea,select,input').forEach(el=>{
+  wireStrategyField(cellEl);
+  cellEl.querySelectorAll('[data-field]').forEach(el=>{
     let timer;
     el.addEventListener('input', ()=>{
       clearTimeout(timer);
@@ -1288,9 +1309,8 @@ function renderBody(id, ambNote){
     (ambNote ? `<div class="flag-note">${ambNote}</div>` : '') +
     contextBlock(t) +
     miniChart(t) +
-    (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) + `
-    <div class="field"><label>Strategy</label>
-      <select data-field="strategy" data-id="${id}" ${dis}>${strategyOptionsHTML(j.strategy)}</select></div>
+    (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) +
+    strategyFieldHTML(j.strategy, id) + `
     <div class="fieldgrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
       <div class="field"><label>Planned Stop ($)</label>
         <input type="number" step="0.01" data-field="stop" data-id="${id}" value="${j.stop||''}" ${dis} style="${inputStyle}"></div>
@@ -1303,7 +1323,8 @@ function renderBody(id, ambNote){
     <div class="save-note" id="save-${id}">${canEdit() ? 'Autosaves as you type' : ''}</div>`;
 
   if(!canEdit()) return;
-  cell.querySelectorAll('textarea,select,input').forEach(el=>{
+  wireStrategyField(cell);
+  cell.querySelectorAll('[data-field]').forEach(el=>{
     let timer;
     el.addEventListener('input', ()=>{
       clearTimeout(timer);
@@ -1406,24 +1427,16 @@ document.getElementById('loadMore').addEventListener('click', ()=>{ visibleClose
 document.getElementById('searchClosed').addEventListener('input', (e)=>{ filterClosed = e.target.value; visibleClosed = PAGE; renderRowsClosed(); });
 document.getElementById('filterRecovered').addEventListener('change', (e)=>{ onlyRecovered = e.target.checked; visibleClosed = PAGE; renderRowsClosed(); });
 document.getElementById('searchOpen').addEventListener('input', (e)=>{ filterOpen = e.target.value; renderRowsOpen(); });
-document.getElementById('stratMgrToggle').addEventListener('click', ()=>{
-  const box = document.getElementById('stratMgr');
-  const show = box.style.display === 'none';
-  box.style.display = show ? '' : 'none';
-  if(show) renderStratMgr();
-});
 
 db.auth.onAuthStateChange((_event, s)=>{
   session = s;
   renderAuth();
-  syncStratMgr();
   refreshOpenEditors();
 });
 
 function renderAll(){
   renderHeroOpen(); renderTheadOpen(); renderRowsOpen();
   renderHeroClosed(); renderTheadClosed(); renderRowsClosed();
-  syncStratMgr();
   const recN = CLOSED_RAW.filter(t=>t.recovered).length;
   document.getElementById('recLabel').textContent = `Recovered cuts (${recN})`;
   const so = latestSync(OPEN_RAW), sc = latestSync(CLOSED_RAW);
