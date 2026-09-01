@@ -251,10 +251,19 @@ def flex_to_account_summary(root: ET.Element, now_iso: str, usdcad: float | None
     """
     Account-level balances in BASE currency, from the NAV + Cash Report sections.
       net_liquidation  <- latest EquitySummaryByReportDateInBase.total
-      available_funds  <- CashReport BASE_SUMMARY endingSettledCash (fallback endingCash)
+      available_funds  <- CashReport BASE_SUMMARY endingCash
     Also derives net_liquidation_usd / available_funds_usd via `usdcad` so the
     dashboard can show everything in USD alongside the already-USD position
     figures, regardless of the account's base currency.
+
+    endingCash (not endingSettledCash) on purpose: confirmed via debug dump
+    2026-09-01 that endingCash reconciles exactly with the NAV row (cash +
+    options == total), while endingSettledCash on this account's Cash Report
+    was ~$1,237 CAD higher than actual cash with no such reconciliation --
+    an IBKR reporting artifact over the report's 1-year window, not a live
+    "what can I trade with right now" figure. Using it made Capital Available
+    inconsistent with Account Balance - Capital Deployed on the dashboard.
+
     Returns None if neither section is present (query not updated yet) -- the
     caller then leaves the existing account_summary row untouched.
     """
@@ -282,9 +291,7 @@ def flex_to_account_summary(root: ET.Element, now_iso: str, usdcad: float | None
         row["currency"] = latest_nav.get("currency")
         row["as_of"] = _date(latest_nav.get("reportDate"))
     if cash_base is not None:
-        row["available_funds"] = _to_float(
-            cash_base.get("endingSettledCash") or cash_base.get("endingCash"), None
-        )
+        row["available_funds"] = _to_float(cash_base.get("endingCash"), None)
         row.setdefault("currency", cash_base.get("currency"))
         row.setdefault("as_of", _date(cash_base.get("toDate")))
 
