@@ -270,6 +270,11 @@ def flex_to_account_summary(root: ET.Element, now_iso: str, usdcad: float | None
     if latest_nav is None and cash_base is None:
         return None
 
+    log(f"DEBUG nav row: {latest_nav}")
+    log(f"DEBUG cash_base row: {cash_base}")
+    for c in root.iter("CashReportCurrency"):
+        log(f"DEBUG cash segment [{c.attrib.get('currency')}]: {c.attrib}")
+
     def _date(v):
         v = (v or "").strip()
         if len(v) == 8 and v.isdigit():
