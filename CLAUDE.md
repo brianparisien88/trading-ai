@@ -87,12 +87,20 @@ API was deliberately not used. The dashboard labels the "as of" date on the Open
 - `price_window` (jsonb, bulky) is excluded from the dashboard's bulk load and
   lazy-fetched per row on expand.
 - Ambiguous FIFO pairings (`ambiguous = true`) are shown, never silently trusted.
-- Account-level figures (`account_summary`) are CAD (base currency); position-level
-  figures are USD. Always label currency; never combine them unlabeled.
+- Account-level figures (`account_summary`) are recorded in the account's BASE
+  currency (`currency` column — CAD historically, moving to USD 2026-09-01) plus
+  sync-derived `net_liquidation_usd`/`available_funds_usd` (via `fx_usdcad`, a
+  same-day Yahoo `CAD=X` rate, pass-through if already USD) so the dashboard can
+  show every Open Trades tile in USD alongside the already-USD position figures.
+  Position-level figures (`open_positions`, `closed_trades`) are always USD.
 - **Never let an empty/failed upstream fetch mutate the DB.** Sync jobs `die`/abort
   on a zero-row fetch that normally has rows; stale-row cleanup runs only on
   tables written that run; transient failures (rate limit / 5xx / empty) raise
-  `TransientError` → exit 0, tables untouched. See `docs/BUILD-PLAYBOOK.md` §3.
+  `TransientError` → exit 0, tables untouched. Onchain sync additionally refuses
+  to overwrite `onchain_trades`/`onchain_summary` if the new trade count drops
+  >15% vs the last successful sync — Zerion has been observed returning a
+  materially truncated (but 200 OK, non-empty) transaction history. See
+  `docs/BUILD-PLAYBOOK.md` §3.
 - **Branch → PR → merge. No pushing to `main`.** `pr-checks.yml` runs deterministic
   gates on every PR (free). For a review, ask Claude Code / `/code-review` to look
   at the branch before merge — the gh-aw auto-reviewer is documented in

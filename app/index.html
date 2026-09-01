@@ -907,15 +907,26 @@ function renderHeroOpen(){
   const totalCostBasis = OPEN_RAW.reduce((a,o)=>a+o.cost_basis,0);
   const dated = OPEN_RAW.filter(o=>o.entry_time);
   const avgDays = dated.length ? (dated.reduce((a,o)=>a+daysHeld(o.entry_time),0)/dated.length).toFixed(0) : '—';
-  const cur = (ACCOUNT && ACCOUNT.currency) || 'CAD';
-  const acctMoney = v => (v==null ? '—' : `${cur} ${Number(v).toFixed(2)}`);
-  const asOf = ACCOUNT && ACCOUNT.as_of
-    ? `as of ${new Date(ACCOUNT.as_of + 'T00:00:00').toLocaleDateString()}`
+  const acct = ACCOUNT || {};
+  const cur = acct.currency || 'CAD';
+  const fx = acct.fx_usdcad;
+  // account_summary is recorded in the account's base currency (CAD
+  // historically); the sync converts it to USD via a same-day Yahoo FX rate
+  // so every Open Trades tile reads in one currency. Falls back to the raw
+  // figure (labelled) only if that day's FX fetch failed.
+  const acctMoneyUsd = (usd, raw) => {
+    if (usd != null) return `USD ${usd>=0?'':'-'}$${Math.abs(usd).toFixed(2)}`;
+    if (raw != null) return `${cur} ${Number(raw).toFixed(2)}`;
+    return '—';
+  };
+  const asOf = acct.as_of
+    ? `as of ${new Date(acct.as_of + 'T00:00:00').toLocaleDateString()}`
     : 'awaiting first sync';
+  const fxNote = (cur !== 'USD' && fx) ? ` · ${cur}→USD @ ${fx.toFixed(3)}` : '';
   document.getElementById('heroOpen').innerHTML = `
     <div class="stat"><div class="stat-label">Account Balance</div>
-      <div class="stat-val mono">${acctMoney(ACCOUNT && ACCOUNT.net_liquidation)}</div>
-      <div class="stat-sub">net liquidation · ${asOf}</div></div>
+      <div class="stat-val mono">${acctMoneyUsd(acct.net_liquidation_usd, acct.net_liquidation)}</div>
+      <div class="stat-sub">net liquidation · ${asOf}${fxNote}</div></div>
     <div class="stat"><div class="stat-label">Unrealized P&amp;L</div>
       <div class="stat-val mono ${totalUnreal>=0?'pos':'neg'}">USD ${totalUnreal>=0?'':'-'}$${Math.abs(totalUnreal).toFixed(2)}</div>
       <div class="stat-sub">live, all open positions</div></div>
@@ -926,8 +937,8 @@ function renderHeroOpen(){
       <div class="stat-val mono">USD ${totalCostBasis.toFixed(2)}</div>
       <div class="stat-sub">cost basis</div></div>
     <div class="stat"><div class="stat-label">Capital Available</div>
-      <div class="stat-val mono">${acctMoney(ACCOUNT && ACCOUNT.available_funds)}</div>
-      <div class="stat-sub">settled cash · ${asOf}</div></div>
+      <div class="stat-val mono">${acctMoneyUsd(acct.available_funds_usd, acct.available_funds)}</div>
+      <div class="stat-sub">settled cash · ${asOf}${fxNote}</div></div>
     <div class="stat"><div class="stat-label">Avg Days Held</div>
       <div class="stat-val mono">${avgDays}${avgDays==='—'?'':'d'}</div>
       <div class="stat-sub">open positions</div></div>`;
