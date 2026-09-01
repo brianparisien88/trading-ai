@@ -199,18 +199,70 @@ downside is asymmetric.
 
 ## 6. "Avoid stocks up 40% off the low" — refined
 
+> **"worked" ≠ "won".** `worked` means a ≥ 10% favourable move was *available*
+> within 20 trading days — the thesis was directionally right. It does **not**
+> mean the trade made money. Across the 40%+ group, `worked` = 67% but only
+> **33% were actually P&L-positive.** The 34-point gap is the move happening
+> after you'd already exited (early, or at a loss on the first dip), or the
+> option decaying past your exit.
+
 Banded by how far above the 3-month low the stock was at entry:
 
-| off 3-month low | n | worked | avg P&L |
-|---|---|---|---|
-| 0–25% | 65 | 46% | +$11 |
-| 25–40% | 30 | 53% | +$14 |
-| **40–60%** | 35 | **69%** | **−$9** |
-| **60%+** | 44 | **66%** | **−$15** |
+| off 3-month low | n | worked (move available) | **P&L-positive** | median P&L | avg P&L |
+|---|---|---|---|---|---|
+| 0–25% | 65 | 46% | — | — | +$11 |
+| 25–40% | 30 | 53% | — | — | +$14 |
+| **40–60%** | 35 | 69% | **31%** (11/35) | **−$18** | −$9 |
+| **60%+** | 44 | 66% | **34%** (15/44) | −$14 | −$15 |
 
-The twist: buying extended did **not** lower the "worked" rate — a move was often
-still available. But the **average P&L is negative** past +40%, because when these
-fail they fail hard. The eight worst extended trades:
+### Is it "a few losers spoiling it"? No.
+
+The 40–60% band (n = 35): winners sum **+$832**, losers sum **−$1,143**, net
+−$311. Strip out the 3 worst (QUBT −$241, RIVN −$208, GLXY −$105 = −$554) and the
+rest is **+$243 total, +$8/trade** — barely positive, and still **60%+ of the
+trades lose**. Removing the tail doesn't rescue it; the band is a coin-flip on
+"did the move happen" and a losing bet on "did I make money."
+
+### 40–60% band — the 6 biggest winners
+
+| trade | held | P&L | return | off 3m / 52wk | range | DTE | note |
+|---|---|---|---|---|---|---|---|
+| GLXY 15 Apr → 17 Apr C | 1.9d | +$142 | +62% | +43 / +43 | 41% | — | quick pop, out in 2d |
+| AEVA 1 May → 15 May C | 13.9d | +$133 | +60% | +45 / +79 | 96% | — | held ~2 wk, peaked +78% |
+| CORZ 8 Jul → 9 Jul C | 0.9d | +$115 | +54% | +40 / +73 | 54% | — | scalp (the 20d rule says "didn't work" — you took the pop) |
+| MARA 13 Apr → 22 Apr C | 9.0d | +$100 | +89% | +54 / +54 | 78% | ~65 | held 9d |
+| CIFR 29 Apr → 12 May C | 12.7d | +$99 | +45% | +41 / +41 | 66% | — | held ~2.5 wk |
+| AAL 22 Jun → 26 Jun C | 4.2d | +$75 | +71% | +58 / +58 | 100% | — | — |
+
+### 40–60% band — the 6 worst losers
+
+| trade | held | P&L | return | off 3m / 52wk | range | DTE |
+|---|---|---|---|---|---|---|
+| QUBT 24 Jun → 17 Jul C | **23d** | −$241 | −227% | +54 / +54 | 56% | — |
+| RIVN 2 Jul → 31 Jul C | **29d** | −$208 | −93% | +44 / +49 | 100% | ~90 |
+| GLXY 22 Apr → 28 Apr C | 6.0d | −$105 | −29% | +59 / +59 | 61% | — |
+| NVAX 27 May → 5 Jun C | 9.0d | −$78 | −38% | +44 / +78 | 97% | — |
+| SMR 22 Apr → 24 Apr C | 1.7d | −$57 | −25% | +48 / +48 | 38% | — |
+| AEVA 21 Apr → 22 Apr C | 1.1d | −$48 | −24% | +46 / +80 | 62% | — |
+
+### What separated worked from didn't, inside the 40–60% band
+
+| at entry | worked | didn't |
+|---|---|---|
+| 20-day return | **+15%** | +8% |
+| **60-day return** | **+9%** | **+22%** |
+| rel. strength vs SPY (20d) | +12 | +5 |
+| range position | 70% | 78% |
+| **days to expiry on the contract** | **63** | **127** |
+| setup score | 1.0 | 0.3 |
+| days actually held | 5.1 | 6.6 |
+
+The winnable version of an extended entry: **strong recent (20-day) momentum but
+the 60-day run isn't exhausted yet, positive relative strength, a ~2-month
+contract.** The losers had already run +22% over 60 days *and* +44%+ off the low —
+double-extended — and used 4-month contracts. Same pattern as §5.
+
+### The eight worst extended trades (40%+, both bands)
 
 | trade | off 3m-low | off 52wk-low | P&L | return | 20d peak |
 |---|---|---|---|---|---|
@@ -230,14 +282,20 @@ with a hard stop — the payoff is negatively skewed (capped upside, fat left ta
 
 ## 7. Time to develop — confirmed and a bit stronger
 
-Of the 123 trades where a ≥ 10% move was available:
+Of the 123 trades where a ≥ 10% move was available, this is when — measured in
+**trading days after entry** — the underlying reached its best favourable point:
 
-| peaked within | count | share | → took longer |
+| the peak came… | trades | share of the 123 | still developing after this point |
 |---|---|---|---|
-| 3 trading days | 8 | 7% | 93% |
-| 5 trading days | 18 | 15% | 85% |
-| 10 trading days | 43 | **35%** | **65%** |
-| 15 trading days | 65 | 53% | 47% |
+| by day 3 | 8 | 7% | 93% |
+| by day 5 | 18 | 15% | 85% |
+| by day 10 | 43 | 35% | **65%** |
+| by day 15 | 65 | 53% | 47% |
+
+Read the last column as "of all the winning moves, what fraction hadn't peaked
+yet at that point." So **65% of winning moves were still climbing after
+trading-day 10** — only 35% had already topped out. It's just `100% − share`;
+it's there to make the "you're exiting too early" point obvious.
 
 Median time to the peak: **14 trading days** (mean 13.2). **Yes — ~2/3 of your
 winning moves take longer than 10 trading days.** By bucket: reversal median
