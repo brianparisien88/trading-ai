@@ -253,7 +253,7 @@ let PAGE = 60, visibleClosed = PAGE, filterClosed = "", filterOpen = "", onlyRec
 // A "recovered cut": exited at a loss, then the underlying ran >= this % in the
 // trade's favour before the contract expired. i.e. the stop was probably too tight.
 const RECOVERED_PEAK = 15;
-let sortOpen = {key:'unrealized_pnl', dir:1};
+let sortOpen = {key:'unrealized_pnl', dir:-1};   // default: highest unrealized P&L on top
 let sortClosed = {key:'exit_time', dir:-1};
 
 // Strategy dropdown choices for the Trade History journal. Loaded from the
