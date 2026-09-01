@@ -307,6 +307,64 @@ incompatible with this.
 
 ---
 
+## 8. Counterfactual — what if the ≤ 2-day exits had been held longer?
+
+**Method:** each trade cut in ≤ 2 days is re-priced with Black–Scholes. Back out
+the implied vol from the actual entry premium, then re-value the same contract at
+a later day using the underlying's real closing price on that day, the reduced
+days-to-expiry, and (for the "realistic" runs) an IV haircut of −15% on calls —
+because a stock that rallies 20–40% almost always sees its option IV drop.
+Absurd back-out IVs (> 160%, thin/meme options) are excluded. Realized P&L is
+net of the actual commissions.
+
+**Now (actual, 255 trades):** realized **−$824** net · win rate **36%** ·
+profit factor **0.96**.
+
+### 8a. Ceiling — keep only the quick-cuts that *would* have worked
+
+62 trades that were cut in ≤ 2 days **and** where a ≥ 10% favourable move did
+materialize within 20 trading days, re-priced at **day 15**, IV held flat
+(optimistic):
+
+| | now | counterfactual |
+|---|---|---|
+| realized P&L (net) | −$824 | **+$8,855** |
+| win rate | 36% | **47%** (121 W / 134 L) |
+| profit factor | 0.96 | **2.23** |
+| account (≈ USD) | ~$3,150 | **~$12,800** |
+
+This is a **ceiling, not a plan** — it requires knowing in advance which quick
+exits would pan out. Re-pricing at the exact 20-day peak instead of day 15 pushes
+it to +$26k / 54% / PF 5.6, which is pure fantasy (you can't sell the top).
+
+### 8b. Realistic — replace the ≤ 2-day rule with a fixed hold on *every* quick-cut
+
+Winners **and** losers held longer, BS re-price with the −15% call-IV haircut:
+
+| hold | trades re-held | P&L delta | realized net | win rate | profit factor | account (≈ USD) |
+|---|---|---|---|---|---|---|
+| 10 trading days | 116 | +$170 | −$650 | 42% | 0.99 | ~$3,300 |
+| **15 trading days** | 113 | **+$2,060** | **+$1,240** | **45%** | **1.14** | **~$5,200** |
+| 20 trading days | 113 | +$4,990 | +$4,170 | 44% | 1.35 | ~$8,100 |
+
+- A **10-day** hold barely moves the needle — the extra losses roughly cancel the
+  extra wins.
+- A **15-day** hold flips the account from −$824 to **+$1,240** and profit factor
+  from 0.96 to **1.14**.
+- A **20-day** hold does better still (**+$4,170**, PF **1.35**).
+
+**Why longer holds win here:** a losing option is capped at −100% (you can't lose
+more than the premium), but a winning one can run +100–300%. Hold everything
+longer and the extra downside is bounded while the extra upside isn't. That
+asymmetry is the whole case for the minimum-hold rule.
+
+**Caveats:** constant-IV would be too generous; the −15% call haircut is a rough
+correction. The model also assumes you could carry 113 positions at once — in
+practice capital/slots would cap that, so treat 8b as *directional*, not a
+promise of +$4k.
+
+---
+
 ## Bottom line (updated from the first doc)
 
 1. **Setup Score isn't a usable filter** — the ≥4 tier worked *less* than the 1–3
@@ -320,3 +378,7 @@ incompatible with this.
 5. **Hold ~15 trading days minimum** (≈ 3 weeks), ~4 weeks for reversals.
 6. **Held-too-long losers all peaked ≤ +9%** — if it hasn't shown you anything by
    ~t+10, it isn't going to; that's the time-stop, not "ride it to expiry."
+7. **The counterfactual (§8):** swapping your ≤ 2-day exit for a blanket 15-day
+   hold — losers included — takes the book from −$824 / PF 0.96 to roughly
+   +$1,240 / PF 1.14; a 20-day hold to ~+$4,170 / PF 1.35. Capped option losses +
+   uncapped option gains is why it works.
