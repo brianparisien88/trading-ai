@@ -958,5 +958,25 @@
       "nullable": true,
       "type": "text"
     }
+  ],
+  "strategy_options": [
+    {
+      "column": "label",
+      "default": null,
+      "nullable": false,
+      "type": "text"
+    },
+    {
+      "column": "sort_order",
+      "default": "100",
+      "nullable": false,
+      "type": "integer"
+    },
+    {
+      "column": "created_at",
+      "default": "now()",
+      "nullable": false,
+      "type": "timestamp with time zone"
+    }
   ]
 }
