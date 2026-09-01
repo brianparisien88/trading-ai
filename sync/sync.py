@@ -247,11 +247,14 @@ def flex_position_contract_by_conid(raw_positions: list[dict], tz) -> dict:
     return out
 
 
-def flex_to_account_summary(root: ET.Element, now_iso: str) -> dict | None:
+def flex_to_account_summary(root: ET.Element, now_iso: str, usdcad: float | None) -> dict | None:
     """
     Account-level balances in BASE currency, from the NAV + Cash Report sections.
       net_liquidation  <- latest EquitySummaryByReportDateInBase.total
       available_funds  <- CashReport BASE_SUMMARY endingSettledCash (fallback endingCash)
+    Also derives net_liquidation_usd / available_funds_usd via `usdcad` so the
+    dashboard can show everything in USD alongside the already-USD position
+    figures, regardless of the account's base currency.
     Returns None if neither section is present (query not updated yet) -- the
     caller then leaves the existing account_summary row untouched.
     """
@@ -284,6 +287,10 @@ def flex_to_account_summary(root: ET.Element, now_iso: str) -> dict | None:
         )
         row.setdefault("currency", cash_base.get("currency"))
         row.setdefault("as_of", _date(cash_base.get("toDate")))
+
+    row["fx_usdcad"] = usdcad
+    row["net_liquidation_usd"] = _to_usd(row.get("net_liquidation"), row.get("currency"), usdcad)
+    row["available_funds_usd"] = _to_usd(row.get("available_funds"), row.get("currency"), usdcad)
     return row
 
 
@@ -376,6 +383,27 @@ def fetch_vix(since: "datetime.date") -> dict:
     """{ yyyy-mm-dd: VIX close } -- one Yahoo call for ^VIX."""
     p1, p2 = _period_bounds(since)
     return _yf_chart("^VIX", p1, p2).get("closes", {})
+
+
+def fetch_usdcad_rate() -> float | None:
+    """Latest USD/CAD rate (1 USD = N CAD) from Yahoo; None if the fetch fails --
+    best-effort, never blocks the sync."""
+    today = datetime.now(timezone.utc).date()
+    p1, p2 = _period_bounds(today)
+    return _yf_chart("CAD=X", p1, p2).get("latest")
+
+
+def _to_usd(value: float | None, currency: str | None, usdcad: float | None) -> float | None:
+    """Convert an account-currency figure to USD. Pass-through for USD, divide by
+    the USD/CAD rate for CAD, null for anything else or a missing rate."""
+    if value is None:
+        return None
+    cur = (currency or "").upper()
+    if cur == "USD":
+        return round(value, 2)
+    if cur == "CAD" and usdcad:
+        return round(value / usdcad, 2)
+    return None
 
 
 def close_on_or_before(closes: dict, iso_date: str | None) -> float | None:
@@ -1087,13 +1115,16 @@ def main() -> None:
     removed = sb.delete_not_in("open_positions", [r["id"] for r in open_rows])
     log(f"open_positions: upserted {len(open_rows)}, removed {removed} stale")
 
-    acct = flex_to_account_summary(root, now_iso)
+    usdcad = fetch_usdcad_rate()
+    acct = flex_to_account_summary(root, now_iso, usdcad)
     if acct is None:
         log("account_summary: NAV / Cash Report sections not in the Flex query -- skipped")
     else:
         sb.upsert("account_summary", [acct])
         log(f"account_summary: net_liq={acct.get('net_liquidation')} "
-            f"avail={acct.get('available_funds')} {acct.get('currency')}")
+            f"avail={acct.get('available_funds')} {acct.get('currency')} "
+            f"(fx usdcad={usdcad} -> net_liq_usd={acct.get('net_liquidation_usd')} "
+            f"avail_usd={acct.get('available_funds_usd')})")
 
     log("done")
 

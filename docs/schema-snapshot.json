@@ -35,6 +35,24 @@
       "default": "now()",
       "nullable": false,
       "type": "timestamp with time zone"
+    },
+    {
+      "column": "fx_usdcad",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "net_liquidation_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "available_funds_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
     }
   ],
   "closed_trades": [

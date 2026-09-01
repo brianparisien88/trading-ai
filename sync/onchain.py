@@ -614,6 +614,23 @@ def main() -> None:
             "onchain tables. Check ZERION_API_KEY / wallet / chain ids.")
 
     sb = Supabase(supabase_url, secret_key)
+
+    # Zerion's /transactions/ endpoint has been seen to return a materially
+    # truncated page set on a 200 OK -- no error, no rate-limit, just fewer
+    # swaps than a run an hour earlier (2026-09-01: 1854 -> 1108 swap txns,
+    # 1269 -> 724 round-trips, silently dropping ~18mo of history and
+    # flipping realized P&L from a real loss to a fake $33.5k gain). zget's
+    # retry logic can't catch this since nothing errors. Guard on the
+    # symptom instead: a healthy run only adds trades day to day, so a big
+    # drop vs the last successful sync means this run's data is suspect.
+    prev = sb.get("onchain_summary", "trade_count")
+    prev_count = (prev[0].get("trade_count") if prev else None) or 0
+    if prev_count and len(trades) < prev_count * 0.85:
+        log(f"trade count dropped {prev_count} -> {len(trades)} (>15%) -- Zerion likely "
+            f"returned a truncated transaction history. Tables left intact; next run "
+            f"will recover. Exiting 0.")
+        return
+
     wrote = []
     if holdings:
         sb.upsert("onchain_holdings", holdings); wrote.append("onchain_holdings")
