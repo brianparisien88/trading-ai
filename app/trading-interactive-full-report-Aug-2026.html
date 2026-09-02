@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup Analysis — Follow-up</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0F1417; --surface:#151B1F; --surface2:#1B232A; --raise:#1E272E;
+    --ink:#EAE8E1; --ink-soft:#94A099; --ink-faint:#6A756F;
+    --line:#28323A; --line-soft:#1E272D;
+    --accent:#48C79E; --accent-deep:#2C7A63;
+    --pos:#4ECCA3; --neg:#E58A72; --warn:#DCA646;
+    --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --sans:"IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    --serif:"Fraunces", Georgia, serif;
+  }
+  @page{ size:Letter; margin:16mm 15mm 18mm; }
+
+  *{box-sizing:border-box}
+  html{
+    background:var(--ground);
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  body{
+    background:var(--ground); color:var(--ink);
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    font-family:var(--sans); font-size:10.3pt; line-height:1.58;
+    margin:0; padding:0; -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:46rem; margin:0 auto; padding:40px 34px 60px;}
+  @media print{ .page{padding:0; max-width:none;} }
+
+  /* ---- cover ---- */
+  .cover{margin-bottom:34px; padding-bottom:26px; border-bottom:2px solid var(--line);}
+  .kicker{
+    font-family:var(--mono); font-size:8pt; font-weight:500; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--accent); margin:0 0 12px;
+  }
+  h1{
+    font-family:var(--serif); font-weight:600; font-size:27pt; line-height:1.08;
+    letter-spacing:-.015em; margin:0 0 12px; text-wrap:balance;
+  }
+  .standfirst{font-size:11pt; line-height:1.55; color:var(--ink-soft); margin:0; max-width:40rem;}
+  .standfirst b{color:var(--ink); font-weight:600;}
+  .standfirst code{font-family:var(--mono); font-size:.86em; color:var(--accent);}
+
+  /* ---- section ---- */
+  section{margin-top:30px; page-break-inside:auto;}
+  section.brk{page-break-before:always;}
+  .s-head{display:flex; gap:14px; align-items:baseline; margin-bottom:6px;}
+  .s-num{
+    font-family:var(--serif); font-weight:600; font-size:15pt; color:var(--accent-deep);
+    line-height:1; flex:none; width:1.5rem;
+  }
+  h2{
+    font-family:var(--serif); font-weight:600; font-size:15pt; line-height:1.2;
+    letter-spacing:-.01em; margin:0; text-wrap:balance; color:var(--ink);
+  }
+  h3{
+    font-family:var(--mono); font-weight:600; font-size:8.5pt; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-soft); margin:22px 0 8px;
+  }
+  p{margin:0 0 10px; max-width:41rem;}
+  p:last-child{margin-bottom:0;}
+  .lead{color:var(--ink-soft); margin-left:2.1rem; max-width:39rem;}
+  strong, b{font-weight:600; color:var(--ink);}
+  em{font-style:italic; color:var(--ink-soft);}
+  code{font-family:var(--mono); font-size:.86em; background:var(--surface2);
+    padding:.06em .35em; border-radius:3px; color:var(--ink);}
+  .body{margin-left:2.1rem;}
+  hr{display:none;}
+
+  /* ---- tables ---- */
+  .tbl-wrap{margin:12px 0 4px 2.1rem; overflow-x:auto;}
+  table.data{
+    border-collapse:collapse; width:100%; font-size:9.2pt;
+    font-variant-numeric:tabular-nums; page-break-inside:avoid;
+  }
+  table.data caption{
+    font-family:var(--mono); font-size:8pt; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-faint); text-align:left; padding-bottom:6px;
+  }
+  table.data th{
+    font-family:var(--mono); font-weight:500; font-size:7.8pt; letter-spacing:.04em;
+    text-transform:uppercase; color:var(--ink-soft); text-align:left;
+    padding:7px 10px; background:var(--surface2); border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  table.data td{
+    padding:6px 10px; border-bottom:1px solid var(--line-soft); vertical-align:top;
+  }
+  table.data tr:last-child td{border-bottom:1px solid var(--line);}
+  table.data td:first-child{color:var(--ink);}
+  table.data .num{font-family:var(--mono); font-size:8.8pt; white-space:nowrap;}
+  .pos{color:var(--pos); font-weight:500;}
+  .neg{color:var(--neg); font-weight:500;}
+  table.data tr.hi td{background:color-mix(in srgb, var(--accent) 8%, transparent);}
+
+  /* ---- callouts ---- */
+  .callout{
+    margin:14px 0 14px 2.1rem; padding:14px 16px; border-radius:8px;
+    background:color-mix(in srgb, var(--accent) 11%, var(--surface));
+    border:1px solid var(--accent-deep); border-left-width:3px;
+    page-break-inside:avoid; max-width:41rem;
+  }
+  .callout.warn{
+    background:color-mix(in srgb, var(--warn) 12%, var(--surface));
+    border-color:color-mix(in srgb, var(--warn) 55%, var(--line));
+  }
+  .callout .tag{
+    font-family:var(--mono); font-size:7.6pt; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--accent); font-weight:600; display:block; margin-bottom:5px;
+  }
+  .callout.warn .tag{color:var(--warn);}
+  .callout p{margin:0; font-size:9.6pt;}
+  .callout p + p{margin-top:7px;}
+
+  ul.plain{margin:8px 0 8px 2.1rem; padding-left:1.1rem; max-width:40rem;}
+  ul.plain li{margin-bottom:5px;}
+  ul.plain li::marker{color:var(--accent-deep);}
+
+  /* ---- bottom line rules ---- */
+  .rules{
+    counter-reset:r; list-style:none; margin:16px 0 0; padding:0;
+    border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    background:var(--surface); page-break-inside:avoid;
+  }
+  .rules li{
+    counter-increment:r; display:grid; grid-template-columns:2.2rem 1fr; gap:2px 14px;
+    padding:12px 18px; border-top:1px solid var(--line-soft); align-items:baseline;
+  }
+  .rules li:first-child{border-top:0;}
+  .rules li::before{
+    content:counter(r); font-family:var(--serif); font-weight:600; font-size:13pt;
+    color:var(--accent); line-height:1;
+  }
+  .rules b{grid-column:2; color:var(--ink);}
+  .rules span{grid-column:2; color:var(--ink-soft); font-size:9.4pt;}
+
+  footer{
+    margin-top:34px; padding-top:14px; border-top:1px solid var(--line);
+    font-family:var(--mono); font-size:8pt; line-height:1.7; color:var(--ink-faint);
+  }
+  footer b{color:var(--ink-soft); font-weight:500;}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="cover">
+    <p class="kicker">Trading Review · Follow-up · 2026-09-01</p>
+    <h1>Setup Analysis — the follow-up, with named trades</h1>
+    <p class="standfirst">Answers to the review questions on the first analysis, backed by specific trades. Re-run against <b>213 analyzable closed trades</b> (needs full 3-month price history before entry + 20 trading days after). <b>"Worked"</b> = a ≥ 10% favourable move in the underlying within 20 trading days of entry. All <code>setup_score</code> values are the current intent-aware v2 score — the original doc quoted the older v1, which is why some numbers shifted.</p>
+  </div>
+
+  <div class="callout">
+    <span class="tag">Read this first — the terms</span>
+    <p><b>Range position</b> — where the stock sat inside its high–low range over the ~3 months (63 trading days) before entry. <code>0%</code> = at the 3-month low, <code>100%</code> = at the 3-month high. For puts it's flipped. "Upper range" = bought near recent highs; "low in the range" = bought closer to recent lows.</p>
+    <p><b>Reversal / Continuation / Chop</b> — <b>reversal</b> = range ≤ 35% and below the 20-day average (beaten down). <b>continuation</b> = range ≥ 55%, above the 20-day average, and beating SPY over 20 days (with the trend, near highs). <b>chop</b> = everything else — a residual bucket, not a real category. "Chop" ≈ no clear directional posture at entry; its ~55% / −$3 is just the base rate.</p>
+    <p><b>"40% off the low"</b> — off the <b>3-month low</b> (lowest close in the ~63 trading days before entry), not the 52-week low.</p>
+  </div>
+
+  <section>
+    <div class="s-head"><div class="s-num">1</div><h2>Win rate by Setup Score — not a reliable filter</h2></div>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>setup score</th><th>n</th><th>worked</th><th>avg P&amp;L</th><th>avg 20d peak</th></tr></thead>
+      <tbody>
+        <tr><td>≤ 0 &nbsp;(weak)</td><td class="num">86</td><td class="num">56%</td><td class="num">−$9</td><td class="num">—</td></tr>
+        <tr class="hi"><td>1–3 &nbsp;(ok)</td><td class="num">80</td><td class="num"><b>66%</b></td><td class="num"><b>+$10</b></td><td class="num">—</td></tr>
+        <tr><td>≥ 4 &nbsp;(strong)</td><td class="num">47</td><td class="num"><b>47%</b></td><td class="num">−$1</td><td class="num">—</td></tr>
+        <tr><td style="color:var(--ink-soft)">— score 3</td><td class="num">12</td><td class="num">92%</td><td class="num">+$25</td><td class="num">+40%</td></tr>
+        <tr><td style="color:var(--ink-soft)">— score 4</td><td class="num">18</td><td class="num">39%</td><td class="num">+$9</td><td class="num">+12%</td></tr>
+        <tr><td style="color:var(--ink-soft)">— score 6 (max)</td><td class="num">22</td><td class="num">45%</td><td class="num">−$12</td><td class="num">+14%</td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">The middle tier (1–3) outperforms the top tier (≥ 4) on both hit-rate and P&amp;L, and the maximum score (6) worked only 45%. Same anti-predictive pattern the first doc flagged — and it <b>persists in the retuned v2 score</b>. Treat the numeric Setup Score as weak signal: directionally useful at the structure extremes, not trustworthy as a cutoff.</p>
+  </section>
+
+  <section>
+    <div class="s-head"><div class="s-num">2</div><h2>"Cleaner setups worked less" — confirmed</h2></div>
+    <p class="lead">Testing the raw claim directly, independent of the score:</p>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>entry profile</th><th>n</th><th>worked</th><th>avg P&amp;L</th></tr></thead>
+      <tbody>
+        <tr class="hi"><td><b>messy + low in range</b> &nbsp;(range ≤ 45, LH/LL or mixed)</td><td class="num">50</td><td class="num"><b>70%</b></td><td class="num">+$17</td></tr>
+        <tr><td><b>clean + high in range</b> &nbsp;(range ≥ 60, HH/HL or flat)</td><td class="num">59</td><td class="num"><b>51%</b></td><td class="num">+$14</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>2a · Clean, high-score setups that FAILED &nbsp;<span style="text-transform:none;font-weight:400">(score ≥ 3, HH/HL or flat, range ≥ 55)</span></h3>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>trade</th><th>score</th><th>struct</th><th>range</th><th>off 3m-low</th><th>held</th><th>P&amp;L</th><th>return</th></tr></thead>
+      <tbody>
+        <tr><td>AFRM &nbsp;28 May → 5 Jun C</td><td class="num">4</td><td>HH/HL</td><td class="num">100%</td><td class="num">+72%</td><td class="num">7.9d</td><td class="num"><b>−$304</b></td><td class="num">−46%</td></tr>
+        <tr><td>MTCH &nbsp;15 Jul → 22 Jul C</td><td class="num">4</td><td>HH/HL</td><td class="num">100%</td><td class="num">+19%</td><td class="num">6.7d</td><td class="num">−$82</td><td class="num">−43%</td></tr>
+        <tr><td>GLXY &nbsp;26 May → 28 May C</td><td class="num">6</td><td>HH/HL</td><td class="num">84%</td><td class="num">+73%</td><td class="num">2.0d</td><td class="num">−$76</td><td class="num">−29%</td></tr>
+        <tr><td>NUAI &nbsp;30 Jun → 1 Jul C</td><td class="num">6</td><td>HH/HL</td><td class="num">90%</td><td class="num">+73%</td><td class="num">1.0d</td><td class="num">−$61</td><td class="num">−41%</td></tr>
+        <tr><td>ARKF &nbsp;4 May → 5 May C</td><td class="num">3</td><td>flat</td><td class="num">89%</td><td class="num">+19%</td><td class="num">1.2d</td><td class="num">−$60</td><td class="num">−24%</td></tr>
+        <tr><td>TSSI &nbsp;22 Apr → 24 Apr C</td><td class="num">4</td><td>HH/HL</td><td class="num">100%</td><td class="num"><b>+121%</b></td><td class="num">1.7d</td><td class="num">−$59</td><td class="num">−25%</td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">Common thread: bought at 84–100% of range (right at the highs), often stretched far off the low, then <b>cut in ≤ 2 days</b>.</p>
+
+    <h3>2b · Clean, high-score setups that WORKED &nbsp;<span style="text-transform:none;font-weight:400">(score ≥ 3, HH/HL or flat)</span></h3>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>trade</th><th>score</th><th>struct</th><th>range</th><th>off 3m-low</th><th>held</th><th>P&amp;L</th><th>return</th></tr></thead>
+      <tbody>
+        <tr><td>SMCI &nbsp;26 May → 3 Jun C</td><td class="num">4</td><td>HH/HL</td><td class="num">100%</td><td class="num">+81%</td><td class="num">8.0d</td><td class="num"><b>+$503</b></td><td class="num">+124%</td></tr>
+        <tr><td>RIOT &nbsp;20 Jul → 23 Jul C</td><td class="num">3</td><td>HH/HL</td><td class="num">31% <em>(rev.)</em></td><td class="num">+25%</td><td class="num">3.0d</td><td class="num">+$355</td><td class="num">+208%</td></tr>
+        <tr><td>EOSE &nbsp;2 Jun → 9 Jun P</td><td class="num">3</td><td>HH/HL</td><td class="num">0% <em>(rev.)</em></td><td class="num">—</td><td class="num">7.1d</td><td class="num">+$185</td><td class="num">+92%</td></tr>
+        <tr><td>AEVA &nbsp;1 May → 15 May C</td><td class="num">5</td><td>HH/HL</td><td class="num">96%</td><td class="num">+45%</td><td class="num">13.9d</td><td class="num">+$133</td><td class="num">+60%</td></tr>
+        <tr><td>MSTR &nbsp;12 Jun → 16 Jun C</td><td class="num">4</td><td>HH/HL</td><td class="num">11% <em>(rev.)</em></td><td class="num">+7%</td><td class="num">4.0d</td><td class="num">+$116</td><td class="num">+14%</td></tr>
+        <tr><td>CIFR &nbsp;29 Apr → 12 May C</td><td class="num">6</td><td>HH/HL</td><td class="num">66%</td><td class="num">+41%</td><td class="num">12.7d</td><td class="num">+$99</td><td class="num">+45%</td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">Common thread: the clean-setup winners either <b>held 8–14 days</b> or were actually <b>reversal</b> entries (low range). Only SMCI is a genuine "bought the breakout, held ~8 days, paid" case.</p>
+  </section>
+
+  <section class="brk">
+    <div class="s-head"><div class="s-num">3</div><h2>Cut too quick vs held too long</h2></div>
+
+    <h3>3a · Cut too quick &nbsp;<span style="text-transform:none;font-weight:400">— held ≤ 3 days, a real move still available</span></h3>
+    <p class="lead">Ranked by favourable move from your exit to the contract's expiry — the honest "left on the table" number.</p>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>trade</th><th>held</th><th>your P&amp;L</th><th>move exit → expiry</th><th>20d peak from entry</th></tr></thead>
+      <tbody>
+        <tr><td>BLSH &nbsp;3 Aug → 6 Aug C</td><td class="num">3.0d</td><td class="num">+$6</td><td class="num"><b>+45%</b></td><td class="num">+48% at t+19d</td></tr>
+        <tr><td>CIFR &nbsp;20 May → 21 May C</td><td class="num">1.1d</td><td class="num">+$30</td><td class="num"><b>+36%</b></td><td class="num">+50% at t+20d</td></tr>
+        <tr><td>SMCI &nbsp;20 May → 21 May C</td><td class="num">1.0d</td><td class="num">−$63</td><td class="num">+11%</td><td class="num">+50% at t+8d</td></tr>
+        <tr><td>NVTS &nbsp;15 Apr → 15 Apr C</td><td class="num">0.1d</td><td class="num">−$11</td><td class="num">+8%</td><td class="num">+121% at t+18d <em>(round-tripped)</em></td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">Caveat: several "big peak, small if-held" trades (ENPH, SPCE, NVTS) <b>spiked then gave it all back</b> — the peak was real but not capturable without a mid-trade exit. BLSH and CIFR are the clean cases where simply holding longer paid.</p>
+
+    <h3>3b · Held too long &nbsp;<span style="text-transform:none;font-weight:400">— held &gt; 14 days, lost money, thesis never developed</span></h3>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>trade</th><th>held</th><th>P&amp;L</th><th>return</th><th>20d peak</th></tr></thead>
+      <tbody>
+        <tr><td>AEVA &nbsp;1 Jul → 7 Aug C</td><td class="num"><b>37d</b></td><td class="num"><b>−$409</b></td><td class="num">−72%</td><td class="num">−13% (t+2d)</td></tr>
+        <tr><td>QUBT &nbsp;24 Jun → 17 Jul C</td><td class="num">23d</td><td class="num">−$241</td><td class="num">−227%</td><td class="num">+2% (t+3d)</td></tr>
+        <tr><td>RIVN &nbsp;2 Jul → 31 Jul C</td><td class="num">29d</td><td class="num">−$208</td><td class="num">−93%</td><td class="num">+8% (t+1d)</td></tr>
+        <tr><td>GME &nbsp;4 May → 17 Jul C</td><td class="num"><b>74d</b></td><td class="num">−$197</td><td class="num">−101%</td><td class="num">+6% (t+2d)</td></tr>
+        <tr><td>FCX &nbsp;12 May → 28 May C</td><td class="num">16d</td><td class="num">−$189</td><td class="num">−44%</td><td class="num">+9% (t+14d)</td></tr>
+        <tr><td>UBER &nbsp;26 Jun → 13 Jul C</td><td class="num">17d</td><td class="num">−$109</td><td class="num">−25%</td><td class="num">−1% (t+1d)</td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">Every one peaked at ≤ +9% favourable — the move never came, and they were held 15–74 days anyway. The "lottery ticket to expiry" trades.</p>
+  </section>
+
+  <section class="brk">
+    <div class="s-head"><div class="s-num">4</div><h2>Buckets — best / worst, and the reversal-sample question</h2></div>
+
+    <h3>Reversal &nbsp;<span style="text-transform:none;font-weight:400">· n = 23 · worked 78% · avg P&amp;L +$34</span></h3>
+    <p class="body"><b>Top 5:</b> RIOT +$355 · SLV +$268 · EOSE(P) +$185 · WEAT +$162 · MSTR +$116<br>
+    <b>Worst 5:</b> KTOS −$119 (held 0.1d) · NFLX −$90 (1.0d) · GLXY(P) −$64 (0.1d) · GLXY −$54 (0.1d) · RBLX −$47 (0.9d)</p>
+    <p class="body"><b>Every one of the 5 reversal losses was cut in ≤ 1 day</b>, and 4 of 5 still had a +10–28% move coming. The reversal book's failures are an <em>execution</em> problem, not a <em>setup</em> problem.</p>
+    <div class="callout warn">
+      <span class="tag">Will the 78% hold as sample size grows?</span>
+      <p>Maybe not. 18/23 = 78%, but the 95% confidence interval is <b>~61%–95%</b> (small n). Split chronologically: first half 7/11 (64%), second half 11/12 (92%) — it has <em>improved</em>, but that's 12 trades. The "deep" subset (range ≤ 15%): 16/18 = 89%.</p>
+      <p><b>Plan around ~65% and rising with size, not 78%.</b> Even the lower bound (61%) beats continuation (56%), so it's probably a real edge — just don't bank the headline.</p>
+    </div>
+
+    <h3>Continuation &nbsp;<span style="text-transform:none;font-weight:400">· n = 102 · worked 56% · avg P&amp;L −$6</span></h3>
+    <p class="body"><b>Top 5:</b> SMCI +$503 · AAPL +$368 · ZETA +$249 · APLD +$161 · HIMS +$137<br>
+    <b>Worst 5:</b> AEVA −$409 · AFRM −$304 · RIVN −$208 · POET −$132 · HIMS −$116</p>
+    <p class="body">Losers were bought far more extended — POET <b>+203%</b> off the 3-month low, AEVA <b>+122%</b>, RIVN +44%, AFRM +72%.</p>
+
+    <h3>Chop &nbsp;<span style="text-transform:none;font-weight:400">· n = 88 · worked 55% · avg P&amp;L −$3</span></h3>
+    <p class="body"><b>Top 5:</b> ENPH +$603 · RIOT +$220 · RIOT +$196 · GLXY +$142 · BNO +$123<br>
+    <b>Worst 5:</b> QUBT −$241 · GLXY(P) −$203 · HOOD −$200 · GME −$197 · FCX −$189</p>
+    <p class="body">The chop <em>winners</em> mostly have low range positions (32%, 41%, 32%) — really reversal-ish trades the bucket rule filed under "chop" because a secondary condition wasn't met. Reinforces that "chop" is a fuzzy residual.</p>
+  </section>
+
+  <section class="brk">
+    <div class="s-head"><div class="s-num">5</div><h2>"Contract length is the continuation lever" — you were right to push back</h2></div>
+    <p class="lead">Re-run with the fuller data, the entry charts are <b>not</b> identical:</p>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>continuation subset</th><th>n</th><th>worked</th><th>avg P&amp;L</th><th>20d return</th><th>off 3m-low</th><th>RS vs SPY</th><th>score</th></tr></thead>
+      <tbody>
+        <tr><td>short-dated &nbsp;(≤ 65 DTE)</td><td class="num">68</td><td class="num">57%</td><td class="num">−$4</td><td class="num">+19%</td><td class="num">+56%</td><td class="num">+16</td><td class="num">2.2</td></tr>
+        <tr><td>long-dated &nbsp;(≥ 85 DTE)</td><td class="num">19</td><td class="num"><b>32%</b></td><td class="num"><b>−$38</b></td><td class="num"><b>+32%</b></td><td class="num">+59%</td><td class="num"><b>+27</b></td><td class="num"><b>0.8</b></td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">The long-DTE continuation trades were bought <b>more extended</b> (+32% vs +19% over 20 days), with <b>higher relative strength</b> (chasing a hotter move: +27 vs +16), and a <b>lower setup score</b> (0.8 vs 2.2). Contract length isn't the cause — it's a <b>tell that you bought later into a run</b>. Consistent with your own read: you reach for a longer contract when less sure of the timing, and "less sure" correlates with a worse entry.</p>
+    <p class="body">Also: within continuation, <b>winners held longer than losers</b> (6.2d vs 4.4d), and winners' contracts averaged 58 DTE vs losers' 92. Nothing here says "hold to expiry" — it says <em>the trades that gapped against you early were the ones you'd bought a long contract for and bailed on fastest.</em></p>
+    <div class="callout">
+      <span class="tag">The rule</span>
+      <p>Not "buy 2-month contracts." It's: <b>don't initiate a continuation trade on a move already run &gt; ~25% over 20 days or &gt; 40% off its 3-month low</b> — and if you do, size it small, because the downside is asymmetric (next section).</p>
+    </div>
+  </section>
+
+  <section class="brk">
+    <div class="s-head"><div class="s-num">6</div><h2>"Avoid stocks up 40% off the low" — refined</h2></div>
+    <div class="callout warn">
+      <span class="tag">"worked" ≠ "won"</span>
+      <p><code>worked</code> means a ≥ 10% favourable move was <em>available</em> within 20 trading days — the thesis was directionally right. It does <b>not</b> mean the trade made money. Across the 40%+ group, <code>worked</code> = 67% but only <b>33% were actually P&amp;L-positive</b>. The 34-point gap is the move happening after you'd already exited (early, or at a loss on the first dip), or the option decaying past your exit.</p>
+    </div>
+    <p class="lead">Banded by how far above the 3-month low the stock was at entry:</p>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>off 3-month low</th><th>n</th><th>worked</th><th>P&amp;L-positive</th><th>median P&amp;L</th><th>avg P&amp;L</th></tr></thead>
+      <tbody>
+        <tr><td>0–25%</td><td class="num">65</td><td class="num">46%</td><td class="num">—</td><td class="num">—</td><td class="num">+$11</td></tr>
+        <tr><td>25–40%</td><td class="num">30</td><td class="num">53%</td><td class="num">—</td><td class="num">—</td><td class="num">+$14</td></tr>
+        <tr class="hi"><td><b>40–60%</b></td><td class="num">35</td><td class="num">69%</td><td class="num"><b>31%</b> (11/35)</td><td class="num"><b>−$18</b></td><td class="num">−$9</td></tr>
+        <tr class="hi"><td><b>60%+</b></td><td class="num">44</td><td class="num">66%</td><td class="num"><b>34%</b> (15/44)</td><td class="num">−$14</td><td class="num">−$15</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Is it "a few losers spoiling it"? &nbsp;No.</h3>
+    <p class="body">The 40–60% band (n = 35): winners sum <b>+$832</b>, losers sum <b>−$1,143</b>, net −$311. Strip out the 3 worst (QUBT −$241, RIVN −$208, GLXY −$105 = −$554) and the rest is <b>+$243 total, +$8/trade</b> — barely positive, and still <b>60%+ of the trades lose</b>. Removing the tail doesn't rescue it: a coin-flip on "did the move happen" and a losing bet on "did I make money."</p>
+
+    <h3>40–60% band — the 6 biggest winners</h3>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>trade</th><th>held</th><th>P&amp;L</th><th>return</th><th>off 3m / 52wk</th><th>range</th><th>DTE</th><th>note</th></tr></thead>
+      <tbody>
+        <tr><td>GLXY &nbsp;15 Apr → 17 Apr C</td><td class="num">1.9d</td><td class="num">+$142</td><td class="num">+62%</td><td class="num">+43 / +43</td><td class="num">41%</td><td class="num">—</td><td>quick pop, out in 2d</td></tr>
+        <tr><td>AEVA &nbsp;1 May → 15 May C</td><td class="num">13.9d</td><td class="num">+$133</td><td class="num">+60%</td><td class="num">+45 / +79</td><td class="num">96%</td><td class="num">—</td><td>held ~2 wk, peaked +78%</td></tr>
+        <tr><td>CORZ &nbsp;8 Jul → 9 Jul C</td><td class="num">0.9d</td><td class="num">+$115</td><td class="num">+54%</td><td class="num">+40 / +73</td><td class="num">54%</td><td class="num">—</td><td>scalp — took the pop</td></tr>
+        <tr><td>MARA &nbsp;13 Apr → 22 Apr C</td><td class="num">9.0d</td><td class="num">+$100</td><td class="num">+89%</td><td class="num">+54 / +54</td><td class="num">78%</td><td class="num">~65</td><td>held 9d</td></tr>
+        <tr><td>CIFR &nbsp;29 Apr → 12 May C</td><td class="num">12.7d</td><td class="num">+$99</td><td class="num">+45%</td><td class="num">+41 / +41</td><td class="num">66%</td><td class="num">—</td><td>held ~2.5 wk</td></tr>
+        <tr><td>AAL &nbsp;22 Jun → 26 Jun C</td><td class="num">4.2d</td><td class="num">+$75</td><td class="num">+71%</td><td class="num">+58 / +58</td><td class="num">100%</td><td class="num">—</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>40–60% band — the 6 worst losers</h3>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>trade</th><th>held</th><th>P&amp;L</th><th>return</th><th>off 3m / 52wk</th><th>range</th><th>DTE</th></tr></thead>
+      <tbody>
+        <tr><td>QUBT &nbsp;24 Jun → 17 Jul C</td><td class="num"><b>23d</b></td><td class="num">−$241</td><td class="num">−227%</td><td class="num">+54 / +54</td><td class="num">56%</td><td class="num">—</td></tr>
+        <tr><td>RIVN &nbsp;2 Jul → 31 Jul C</td><td class="num"><b>29d</b></td><td class="num">−$208</td><td class="num">−93%</td><td class="num">+44 / +49</td><td class="num">100%</td><td class="num">~90</td></tr>
+        <tr><td>GLXY &nbsp;22 Apr → 28 Apr C</td><td class="num">6.0d</td><td class="num">−$105</td><td class="num">−29%</td><td class="num">+59 / +59</td><td class="num">61%</td><td class="num">—</td></tr>
+        <tr><td>NVAX &nbsp;27 May → 5 Jun C</td><td class="num">9.0d</td><td class="num">−$78</td><td class="num">−38%</td><td class="num">+44 / +78</td><td class="num">97%</td><td class="num">—</td></tr>
+        <tr><td>SMR &nbsp;22 Apr → 24 Apr C</td><td class="num">1.7d</td><td class="num">−$57</td><td class="num">−25%</td><td class="num">+48 / +48</td><td class="num">38%</td><td class="num">—</td></tr>
+        <tr><td>AEVA &nbsp;21 Apr → 22 Apr C</td><td class="num">1.1d</td><td class="num">−$48</td><td class="num">−24%</td><td class="num">+46 / +80</td><td class="num">62%</td><td class="num">—</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>What separated worked from didn't, inside the 40–60% band</h3>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>at entry</th><th>worked</th><th>didn't</th></tr></thead>
+      <tbody>
+        <tr><td>20-day return</td><td class="num"><b>+15%</b></td><td class="num">+8%</td></tr>
+        <tr class="hi"><td><b>60-day return</b></td><td class="num"><b>+9%</b></td><td class="num"><b>+22%</b></td></tr>
+        <tr><td>rel. strength vs SPY (20d)</td><td class="num">+12</td><td class="num">+5</td></tr>
+        <tr><td>range position</td><td class="num">70%</td><td class="num">78%</td></tr>
+        <tr class="hi"><td><b>days to expiry</b></td><td class="num"><b>63</b></td><td class="num"><b>127</b></td></tr>
+        <tr><td>setup score</td><td class="num">1.0</td><td class="num">0.3</td></tr>
+        <tr><td>days actually held</td><td class="num">5.1</td><td class="num">6.6</td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">The winnable version of an extended entry: <b>strong recent (20-day) momentum but the 60-day run isn't exhausted yet, positive relative strength, a ~2-month contract</b>. The losers had already run +22% over 60 days <em>and</em> +44%+ off the low — double-extended — and used 4-month contracts. Same pattern as §5.</p>
+
+    <h3>The eight worst extended trades &nbsp;<span style="text-transform:none;font-weight:400">(40%+, both bands)</span></h3>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>trade</th><th>off 3m-low</th><th>off 52wk-low</th><th>P&amp;L</th><th>return</th><th>20d peak</th></tr></thead>
+      <tbody>
+        <tr><td>AEVA &nbsp;1 Jul C</td><td class="num">+122%</td><td class="num">+203%</td><td class="num">−$409</td><td class="num">−72%</td><td class="num">−13%</td></tr>
+        <tr><td>AFRM &nbsp;28 May C</td><td class="num">+72%</td><td class="num">+72%</td><td class="num">−$304</td><td class="num">−46%</td><td class="num">+9%</td></tr>
+        <tr><td>QUBT &nbsp;24 Jun C</td><td class="num">+54%</td><td class="num">+54%</td><td class="num">−$241</td><td class="num">−227%</td><td class="num">+2%</td></tr>
+        <tr><td>RIVN &nbsp;2 Jul C</td><td class="num">+44%</td><td class="num">+49%</td><td class="num">−$208</td><td class="num">−93%</td><td class="num">+8%</td></tr>
+        <tr><td>POET &nbsp;3 Jun C</td><td class="num"><b>+203%</b></td><td class="num">+269%</td><td class="num">−$132</td><td class="num">−47%</td><td class="num">+1%</td></tr>
+        <tr><td>HIMS &nbsp;4 Jun C</td><td class="num">+78%</td><td class="num">+93%</td><td class="num">−$116</td><td class="num">−29%</td><td class="num">+37%</td></tr>
+        <tr><td>AEVA &nbsp;22 Jun C</td><td class="num">+117%</td><td class="num">+175%</td><td class="num">−$112</td><td class="num">−28%</td><td class="num">+14%</td></tr>
+        <tr><td>CIFR &nbsp;14 May C</td><td class="num">+86%</td><td class="num">+86%</td><td class="num">−$106</td><td class="num">−38%</td><td class="num">+18%</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout">
+      <span class="tag">Rule</span>
+      <p>Past +40% off the 3-month low, either pass or take a small position with a hard stop — the payoff is negatively skewed (capped upside, fat left tail).</p>
+    </div>
+  </section>
+
+  <section class="brk">
+    <div class="s-head"><div class="s-num">7</div><h2>Time to develop — confirmed, a bit stronger</h2></div>
+    <p class="lead">Of the 123 trades where a ≥ 10% move was available, when — in trading days after entry — did the underlying reach its best favourable point:</p>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>the peak came…</th><th>trades</th><th>share of the 123</th><th>still developing after this</th></tr></thead>
+      <tbody>
+        <tr><td>by day 3</td><td class="num">8</td><td class="num">7%</td><td class="num">93%</td></tr>
+        <tr><td>by day 5</td><td class="num">18</td><td class="num">15%</td><td class="num">85%</td></tr>
+        <tr class="hi"><td>by day 10</td><td class="num">43</td><td class="num">35%</td><td class="num"><b>65%</b></td></tr>
+        <tr><td>by day 15</td><td class="num">65</td><td class="num">53%</td><td class="num">47%</td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">The last column is <code>100 − share</code> — "of all the winning moves, what fraction hadn't peaked yet." So <b>65% of winning moves were still climbing after trading-day 10</b> — only 35% had topped out.</p>
+    <p class="body">Median time to the peak: <b>14 trading days</b> (mean 13.2). <b>~2/3 of winning moves take longer than 10 trading days.</b> By bucket: reversal median <b>18 td</b>, continuation and chop median 14 td.</p>
+    <div class="callout">
+      <span class="tag">Takeaway</span>
+      <p>Allowing <b>15 trading days (~3 calendar weeks)</b> for a trade to develop is right; <b>reversal trades need closer to 4 weeks</b>. A 2-day exit rule is structurally incompatible with this.</p>
+    </div>
+  </section>
+
+  <section class="brk">
+    <div class="s-head"><div class="s-num">8</div><h2>Counterfactual — holding the ≤ 2-day exits longer</h2></div>
+    <p class="lead"><b>Method:</b> each trade cut in ≤ 2 days is re-priced with Black–Scholes. Back out the implied vol from the actual entry premium, then re-value the same contract at a later day using the underlying's real close, reduced days-to-expiry, and (realistic runs) a −15% IV haircut on calls, since a stock that rallies 20–40% almost always sees its option IV drop. Absurd back-out IVs (&gt; 160%) excluded. P&amp;L is net of actual commissions.</p>
+    <div class="callout">
+      <span class="tag">Now &nbsp;·&nbsp; actual, 255 trades</span>
+      <p>Realized <b>−$824</b> net &nbsp;·&nbsp; win rate <b>36%</b> &nbsp;·&nbsp; profit factor <b>0.96</b>.</p>
+    </div>
+
+    <h3>8a · Ceiling — keep only the quick-cuts that <span style="text-transform:none">would</span> have worked</h3>
+    <p class="body">62 trades cut in ≤ 2 days <b>and</b> where a ≥ 10% move materialized within 20 trading days, re-priced at <b>day 15</b>, IV held flat (optimistic):</p>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th></th><th>now</th><th>counterfactual</th></tr></thead>
+      <tbody>
+        <tr><td>realized P&amp;L (net)</td><td class="num">−$824</td><td class="num"><b>+$8,855</b></td></tr>
+        <tr><td>win rate</td><td class="num">36%</td><td class="num"><b>47%</b> &nbsp;(121 W / 134 L)</td></tr>
+        <tr><td>profit factor</td><td class="num">0.96</td><td class="num"><b>2.23</b></td></tr>
+        <tr><td>account (≈ USD)</td><td class="num">~$3,150</td><td class="num"><b>~$12,800</b></td></tr>
+      </tbody>
+    </table></div>
+    <p class="body">A <b>ceiling, not a plan</b> — it requires knowing in advance which quick exits would pan out. Re-pricing at the exact 20-day peak pushes it to +$26k / 54% / PF 5.6 — pure fantasy (you can't sell the top).</p>
+
+    <h3>8b · Realistic — replace the ≤ 2-day rule with a fixed hold on <span style="text-transform:none">every</span> quick-cut</h3>
+    <p class="body">Winners <b>and</b> losers held longer, BS re-price with the −15% call-IV haircut:</p>
+    <div class="tbl-wrap"><table class="data">
+      <thead><tr><th>hold</th><th>trades re-held</th><th>P&amp;L delta</th><th>realized net</th><th>win rate</th><th>profit factor</th><th>account ≈ USD</th></tr></thead>
+      <tbody>
+        <tr><td>10 trading days</td><td class="num">116</td><td class="num">+$170</td><td class="num">−$650</td><td class="num">42%</td><td class="num">0.99</td><td class="num">~$3,300</td></tr>
+        <tr class="hi"><td><b>15 trading days</b></td><td class="num">113</td><td class="num"><b>+$2,060</b></td><td class="num"><b>+$1,240</b></td><td class="num"><b>45%</b></td><td class="num"><b>1.14</b></td><td class="num"><b>~$5,200</b></td></tr>
+        <tr><td>20 trading days</td><td class="num">113</td><td class="num">+$4,990</td><td class="num">+$4,170</td><td class="num">44%</td><td class="num">1.35</td><td class="num">~$8,100</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="plain">
+      <li>A <b>10-day</b> hold barely moves the needle — the extra losses roughly cancel the extra wins.</li>
+      <li>A <b>15-day</b> hold flips the account from −$824 to <b>+$1,240</b> and profit factor 0.96 → <b>1.14</b>.</li>
+      <li>A <b>20-day</b> hold does better still (<b>+$4,170</b>, PF <b>1.35</b>).</li>
+    </ul>
+    <div class="callout">
+      <span class="tag">Why longer holds win here</span>
+      <p>A losing option is capped at −100% (you can't lose more than the premium); a winning one can run +100–300%. Hold everything longer and the extra downside is bounded while the extra upside isn't. That asymmetry is the whole case for a minimum-hold rule — you don't need to pick the winners, just stop cutting them.</p>
+    </div>
+    <p class="body"><b>Caveats:</b> constant-IV would be too generous; the −15% call haircut is a rough correction. Assumes you could carry 113 positions at once — capital/slots would cap that. Treat 8b as <em>directional</em>, not a promise of +$4k.</p>
+  </section>
+
+  <section class="brk">
+    <div class="s-head"><div class="s-num">—</div><h2>Bottom line</h2></div>
+    <ol class="rules">
+      <li><b>Setup Score isn't a usable filter.</b><span>The ≥ 4 tier worked <em>less</em> than the 1–3 tier. Don't gate entries on it.</span></li>
+      <li><b>Reversal is probably a real edge, but 78% is optimistic.</b><span>Plan around ~65%, improving with size. Its losses are almost entirely same-day panic exits.</span></li>
+      <li><b>The continuation "DTE lever" was a mis-read.</b><span>Long contracts flag <em>chasing an extended move</em>, they don't cause the loss. The real filter is extension-at-entry (&gt; 25% / 20d, &gt; 40% off the low).</span></li>
+      <li><b>Extended entries: not a lower hit-rate, a worse skew.</b><span>Cap size, hard stop.</span></li>
+      <li><b>Hold ~15 trading days minimum</b> <span>(≈ 3 weeks), ~4 weeks for reversals.</span></li>
+      <li><b>Held-too-long losers all peaked ≤ +9%.</b><span>If it hasn't shown you anything by ~t+10, it isn't going to — that's the time-stop, not "ride it to expiry."</span></li>
+      <li><b>The counterfactual (§8).</b><span>Swapping the ≤ 2-day exit for a blanket 15-day hold — losers included — takes the book from −$824 / PF 0.96 to ~+$1,240 / PF 1.14; a 20-day hold to ~+$4,170 / PF 1.35.</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    <b>Basis:</b> 255 closed options round-trips, April–August 2026 · realized −$824 after commissions · 36% win rate · 0.96 profit factor.<br>
+    <b>Method:</b> "worked" = a ≥ 10% favourable underlying move within 20 trading days. §8 re-prices each contract with Black–Scholes (implied vol from the actual entry premium, −15% haircut on calls). Directional, not a guaranteed number.<br>
+    <b>Companion:</b> setup-analysis-2026-08-30 (the original) · this follow-up dated 2026-09-01.
+  </footer>
+
+</div>
+<script>
+  // colour signed dollar / percent figures in table number cells
+  document.querySelectorAll('table.data td.num').forEach(function(td){
+    var t = td.textContent;
+    if(/(^|\s)[−-]\s?\$?\d/.test(t) || /[−-]\d+%/.test(t)){
+      if(!td.querySelector('b')) td.classList.add('neg');
+      else td.querySelectorAll('b').forEach(b=>b.classList.add('neg'));
+    } else if(/\+\s?\$?\d/.test(t) || /\+\d+%/.test(t)){
+      if(!td.querySelector('b')) td.classList.add('pos');
+      else td.querySelectorAll('b').forEach(b=>b.classList.add('pos'));
+    }
+  });
+</script>
+</body>
+</html>
