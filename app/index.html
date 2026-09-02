@@ -54,6 +54,7 @@
 
   .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap;}
   .synced{font-size:11.5px; color:var(--dim);}
+  .sync-status{font-size:11.5px; color:var(--dim); margin:-6px 0 12px;}
   .linkbtn{background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px;
     padding:4px 10px; font-size:12px; cursor:pointer;}
   .linkbtn:hover{color:var(--text); border-color:var(--muted);}
@@ -172,6 +173,7 @@
 
   <!-- OPEN TAB -->
   <div class="panel active" id="panel-open">
+    <div class="sync-status" id="syncStatusOpen"></div>
     <div class="hero" id="heroOpen"></div>
     <div class="toolbar">
       <input class="search" id="searchOpen" placeholder="Filter symbol...">
@@ -186,6 +188,7 @@
 
   <!-- ONCHAIN TAB -->
   <div class="panel" id="panel-onchain">
+    <div class="sync-status" id="syncStatusOnchain"></div>
     <div class="hero hero5" id="heroOnchain"></div>
     <div class="toolbar">
       <div class="synced" id="onchainWallet" style="font-family:var(--mono,monospace);"></div>
@@ -741,6 +744,7 @@ function renderOnchainTradesRibbon(){
 
 function renderOnchainHero(){
   const s = ONCHAIN_SUMMARY || {};
+  renderSyncStatus('syncStatusOnchain', 'Onchain data', s.synced_at, 12, 30);
   const el = document.getElementById('heroOnchain');
   if(!el) return;
   const pnlWin = s.pnl_window_usd, winDays = s.pnl_window_days;
@@ -902,7 +906,34 @@ const OPEN_COLS = [
   {key:'unrealized_pnl', label:'P&L'},
 ];
 
+// Sync-status labels ("Trading data last updated: ... (next scheduled update is ...)").
+// Both sync jobs run on a fixed UTC cron (sync.yml 12:00 UTC, onchain.yml 12:30 UTC) --
+// computed here in the viewer's own local time, not hardcoded to any one timezone.
+function fmtSyncStamp(d){
+  const datePart = d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+  let h = d.getHours(), m = d.getMinutes();
+  const ampm = h>=12 ? 'pm' : 'am';
+  h = h % 12; if(h===0) h = 12;
+  const timePart = m===0 ? `${h}${ampm}` : `${h}:${String(m).padStart(2,'0')}${ampm}`;
+  return `${datePart} @${timePart}`;
+}
+function nextScheduledUTC(hourUTC, minuteUTC){
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUTC, minuteUTC, 0));
+  if(next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate()+1);
+  return next;
+}
+function renderSyncStatus(elId, label, lastIso, hourUTC, minuteUTC){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  const next = fmtSyncStamp(nextScheduledUTC(hourUTC, minuteUTC));
+  el.textContent = lastIso
+    ? `${label} last updated: ${fmtSyncStamp(new Date(lastIso))} (next scheduled update is ${next})`
+    : `${label}: awaiting first sync (next scheduled update is ${next})`;
+}
+
 function renderHeroOpen(){
+  renderSyncStatus('syncStatusOpen', 'Trading data', ACCOUNT && ACCOUNT.synced_at, 12, 0);
   const totalUnreal = OPEN_RAW.reduce((a,o)=>a+o.unrealized_pnl,0);
   const totalCostBasis = OPEN_RAW.reduce((a,o)=>a+o.cost_basis,0);
   const dated = OPEN_RAW.filter(o=>o.entry_time);
