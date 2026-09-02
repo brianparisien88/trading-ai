@@ -934,7 +934,7 @@ function renderSyncStatus(elId, label, lastIso, hourUTC, minuteUTC){
 }
 
 function renderHeroOpen(){
-  renderSyncStatus('syncStatusOpen', 'Trading data', ACCOUNT && ACCOUNT.synced_at, 12, 0);
+  renderSyncStatus('syncStatusOpen', 'Trading data', ACCOUNT && ACCOUNT.synced_at, 12, 16);
   const totalUnreal = OPEN_RAW.reduce((a,o)=>a+o.unrealized_pnl,0);
   const totalCostBasis = OPEN_RAW.reduce((a,o)=>a+o.cost_basis,0);
   const dated = OPEN_RAW.filter(o=>o.entry_time);
@@ -1090,7 +1090,7 @@ function computeStats(trades){
 }
 
 function renderHeroClosed(){
-  renderSyncStatus('syncStatusClosed', 'Trading data', ACCOUNT && ACCOUNT.synced_at, 12, 0);
+  renderSyncStatus('syncStatusClosed', 'Trading data', ACCOUNT && ACCOUNT.synced_at, 12, 16);
   const s = computeStats(CLOSED_RAW);
   const net = s.totalPnl - s.totalComm;
   document.getElementById('heroClosed').innerHTML = `
