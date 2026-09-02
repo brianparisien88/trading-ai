@@ -6,12 +6,21 @@ name: Sync IBKR trades to Supabase
 
 on:
   schedule:
-    # 12:00 UTC (~08:00 ET) — after IBKR's overnight batch finalises the prior
-    # trading day's Flex statement. Running earlier (e.g. just after the close)
-    # gets a statement that still ends the *previous* day, so same-day trades
-    # would lag two days instead of one.
-    - cron: '0 12 * * *'
-  workflow_dispatch:        # manual "Run workflow" button
+    # Primary: 12:16 UTC (~08:16 ET) — after IBKR's overnight batch finalises
+    # the prior trading day's Flex statement (see docs/BUILD-PLAYBOOK.md / the
+    # sync-timing history). Off the :00 mark on purpose: GitHub documents that
+    # scheduled workflows can be delayed under high load, and the top of every
+    # hour is the worst of it (every repo's `0 * * * *`-style cron collides at
+    # once) — observed a 14-minute delay on 2026-09-02 at the old `0 12 * * *`.
+    - cron: '16 12 * * *'
+    # Fallback: 12:30 UTC, 14 minutes later. Runs check_synced.py first, which
+    # only lets the real sync proceed if today's primary tick never landed
+    # (missed/delayed past this point) — see the "Check" step below. Matches
+    # the observed worst-case delay above, so it should rarely actually fire;
+    # `concurrency` below means even a false-positive double-trigger just
+    # queues harmlessly behind the primary run rather than racing it.
+    - cron: '30 12 * * *'
+  workflow_dispatch:        # manual "Run workflow" button — always syncs, no check
 
 concurrency:
   group: ibkr-sync
@@ -26,7 +35,18 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r sync/requirements.txt
+
+      - name: Check whether today's sync already ran (fallback tick only)
+        id: check
+        if: github.event.schedule == '30 12 * * *'
+        working-directory: sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: echo "result=$(python check_synced.py)" >> "$GITHUB_OUTPUT"
+
       - name: Run sync
+        if: steps.check.outputs.result != 'skip'
         working-directory: sync
         env:
           FLEX_TOKEN: ${{ secrets.FLEX_TOKEN }}

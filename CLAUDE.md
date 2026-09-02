@@ -6,7 +6,8 @@ entries) + `docs/session_changelog_2026-08-26.md` + `docs/build_brief_*`.
 
 ## Architecture (deterministic ETL — no LLM at runtime)
 
-1. **Sync** (`sync/`, GitHub Actions daily 12:00 UTC ≈ 08:00 ET): pull IBKR Flex Web
+1. **Sync** (`sync/`, GitHub Actions daily ~12:16 UTC ≈ 08:16 ET, + a 12:30 UTC fallback
+   tick that only syncs if the primary one didn't land): pull IBKR Flex Web
    Service XML → `trade_pipeline.py` (merge fills by order → FIFO-pair → derive) →
    enrich (contract detail from Flex; underlying stock prices from Yahoo Finance's
    keyless chart API, one call/ticker) → write Supabase with the secret key.
@@ -68,12 +69,18 @@ must never appear in `app/` or any committed file.
 
 IBKR's Flex Web Service reports **open positions and NAV as of the prior *finalised*
 business day**, not live. IBKR finalises a day's statement in an overnight batch
-(ready ~05:00–08:00 ET next day), so the sync runs at 12:00 UTC to catch it. A
-position closed today lands in `closed_trades` and drops off `open_positions` on the
-*next* day's sync — a consistent ~1-day lag. (Running just after the market close
-instead would get a statement still ending the previous day, making it a 2-day lag.)
-This is inherent to Flex — the headless/tokenised tradeoff; the live Client Portal
-API was deliberately not used. The dashboard labels the "as of" date on the Open tab.
+(ready ~05:00–08:00 ET next day), so the sync runs at ~12:16 UTC to catch it — off the
+:00 mark on purpose, since GitHub Actions' scheduled triggers can be delayed under
+high load and the top of the hour is the worst of it (every repo's on-the-hour cron
+collides at once; observed a 14-minute delay at the old `0 12 * * *` on 2026-09-02). A
+12:30 UTC fallback tick checks `account_summary.synced_at` (`sync/check_synced.py`)
+and only actually syncs if the primary tick never landed that day. A position closed
+today lands in `closed_trades` and drops off `open_positions` on the *next* day's
+sync — a consistent ~1-day lag. (Running just after the market close instead would
+get a statement still ending the previous day, making it a 2-day lag.) This is
+inherent to Flex — the headless/tokenised tradeoff; the live Client Portal API was
+deliberately not used. The dashboard labels the "as of" date on the Open tab, and
+both tabs show a "data last updated / next scheduled update" line under the tabs.
 
 ## Hard rules
 
