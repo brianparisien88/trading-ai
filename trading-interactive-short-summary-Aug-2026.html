@@ -1,0 +1,221 @@
+<title>The Hold Problem</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#FBFAF7; --surface:#FFFFFF; --ink:#1A1D21; --ink-soft:#55605C;
+    --line:#E4E2DA; --line-soft:#EEEDE6;
+    --accent:#0F7A5F; --accent-wash:#EAF2EE;
+    --loss:#A83E2B; --loss-wash:#F6EAE6;
+    --shadow:0 1px 2px rgba(26,29,33,.04), 0 8px 28px -12px rgba(26,29,33,.10);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1417; --surface:#161C1F; --ink:#ECEAE2; --ink-soft:#93A09A;
+      --line:#26302D; --line-soft:#1E2623;
+      --accent:#41C39B; --accent-wash:#15241F;
+      --loss:#DB795F; --loss-wash:#2A1B17;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px -14px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1417; --surface:#161C1F; --ink:#ECEAE2; --ink-soft:#93A09A;
+    --line:#26302D; --line-soft:#1E2623;
+    --accent:#41C39B; --accent-wash:#15241F;
+    --loss:#DB795F; --loss-wash:#2A1B17;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px -14px rgba(0,0,0,.55);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    font-size:16px; line-height:1.6; margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:43rem; margin:0 auto; padding:clamp(2.5rem,6vw,5.5rem) clamp(1.25rem,5vw,2rem) 5rem;}
+
+  .eyebrow{
+    font-family:"IBM Plex Mono", monospace; font-size:.72rem; font-weight:500;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--accent);
+    margin:0 0 1.1rem;
+  }
+  h1{
+    font-family:"Fraunces", Georgia, serif; font-weight:600;
+    font-size:clamp(2.1rem,6vw,3rem); line-height:1.08; letter-spacing:-.015em;
+    text-wrap:balance; margin:0 0 1.4rem;
+  }
+  .lede{
+    font-size:clamp(1.12rem,2.6vw,1.3rem); line-height:1.5; color:var(--ink-soft);
+    text-wrap:pretty; margin:0 0 1rem; max-width:34rem;
+  }
+  .lede b{color:var(--ink); font-weight:600;}
+
+  section{margin-top:clamp(3rem,7vw,4.5rem);}
+  h2{
+    font-family:"Fraunces", Georgia, serif; font-weight:600;
+    font-size:clamp(1.4rem,3.4vw,1.7rem); line-height:1.2; letter-spacing:-.01em;
+    text-wrap:balance; margin:0 0 .5rem;
+  }
+  .sub{color:var(--ink-soft); margin:0 0 1.5rem; max-width:33rem; text-wrap:pretty;}
+  p{margin:0 0 1rem; max-width:34rem;}
+  p:last-child{margin-bottom:0;}
+
+  .fig{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:1.4rem 1.5rem 1.2rem; box-shadow:var(--shadow); margin:1.5rem 0 0;
+  }
+  .fig svg{display:block; width:100%; height:auto; overflow:visible;}
+  .fig figcaption{
+    font-family:"IBM Plex Mono", monospace; font-size:.74rem; color:var(--ink-soft);
+    letter-spacing:.02em; margin-top:1rem; padding-top:.9rem; border-top:1px solid var(--line-soft);
+  }
+  text{font-family:"IBM Plex Sans", sans-serif;}
+  .barval{font-family:"IBM Plex Mono", monospace; font-weight:500;}
+
+  .didnt{list-style:none; padding:0; margin:1.4rem 0 0; display:flex; flex-direction:column; gap:.9rem;}
+  .didnt li{
+    padding-left:1.5rem; position:relative; color:var(--ink-soft); max-width:34rem;
+  }
+  .didnt li::before{
+    content:"\00D7"; position:absolute; left:0; top:-.05em; color:var(--loss);
+    font-weight:600; font-size:1.15em;
+  }
+  .didnt b{color:var(--ink); font-weight:600;}
+
+  .actions{
+    margin-top:1.6rem; background:var(--accent-wash);
+    border:1px solid var(--line); border-radius:12px; overflow:hidden;
+  }
+  .actions ol{list-style:none; counter-reset:a; margin:0; padding:.5rem 0;}
+  .actions li{
+    counter-increment:a; display:grid; grid-template-columns:2.6rem 1fr; gap:.4rem 1rem;
+    padding:1.05rem 1.5rem; border-top:1px solid color-mix(in srgb, var(--line) 60%, transparent);
+    align-items:baseline;
+  }
+  .actions li:first-child{border-top:0;}
+  .actions li::before{
+    content:counter(a); font-family:"Fraunces", serif; font-weight:600;
+    font-size:1.5rem; color:var(--accent); line-height:1;
+  }
+  .actions .act-h{font-weight:600; color:var(--ink); grid-column:2;}
+  .actions .act-d{grid-column:2; color:var(--ink-soft); font-size:.95rem; margin-top:.2rem;}
+
+  .kicker{
+    margin-top:clamp(3rem,7vw,4.5rem); padding-top:1.5rem; border-top:1px solid var(--line);
+    font-family:"IBM Plex Mono", monospace; font-size:.76rem; line-height:1.7;
+    color:var(--ink-soft); letter-spacing:.01em;
+  }
+  .kicker b{color:var(--ink); font-weight:500;}
+
+  @media (prefers-reduced-motion:no-preference){
+    .fig{transition:none;}
+  }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Trading Review  /  255 trades  /  Apr-Aug 2026</p>
+  <h1>You're right about the trade. You're wrong about when to sell.</h1>
+  <p class="lede">The stock went your way within three weeks on <b>roughly 6 of every 10 trades</b>. You closed in profit on <b>3.5 of 10</b>. That gap isn't stock-picking. It's exit timing, and it's fixable without changing a single entry.</p>
+
+  <section>
+    <p class="eyebrow" style="color:var(--ink-soft)">The evidence  /  1 of 3</p>
+    <h2>Being right didn't pay</h2>
+    <p class="sub">"Right" = the stock moved at least 10% your way within 20 trading days. "Paid" = the trade closed green.</p>
+    <figure class="fig">
+      <svg viewBox="0 0 560 150" role="img" aria-label="Direction was right on about 60 percent of trades; only 36 percent closed in profit.">
+        <text x="0" y="24" font-size="13" fill="var(--ink-soft)">Direction was right</text>
+        <rect x="0" y="34" width="540" height="20" rx="3" fill="var(--line-soft)"/>
+        <rect x="0" y="34" width="324" height="20" rx="3" fill="var(--accent)"/>
+        <text x="334" y="49" font-size="13" class="barval" fill="var(--ink)">~60%</text>
+        <text x="0" y="98" font-size="13" fill="var(--ink-soft)">Trade closed in profit</text>
+        <rect x="0" y="108" width="540" height="20" rx="3" fill="var(--line-soft)"/>
+        <rect x="0" y="108" width="194" height="20" rx="3" fill="var(--loss)"/>
+        <text x="204" y="123" font-size="13" class="barval" fill="var(--ink)">36%</text>
+      </svg>
+      <figcaption>The thesis was sound most of the time. The position didn't capture it.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <p class="eyebrow" style="color:var(--ink-soft)">The evidence  /  2 of 3</p>
+    <h2>The winning move is slow</h2>
+    <p class="sub">When a trade works, the best exit point arrives on average <b>14 trading days</b> (about three calendar weeks) after entry. You were often out in two.</p>
+    <figure class="fig">
+      <svg viewBox="0 0 560 132" role="img" aria-label="Traders often exit around day 2, but winning moves peak around day 14, and 65 percent are still building after day 10.">
+        <line x1="0" y1="86" x2="540" y2="86" stroke="var(--line)" stroke-width="1.5"/>
+        <path d="M0 86 C 150 86, 210 34, 340 30 C 430 27, 470 52, 540 74" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+        <rect x="330" y="86" width="210" height="0" />
+        <path d="M0 86 C 150 86, 210 34, 340 30 C 430 27, 470 52, 540 74 L 540 86 L 0 86 Z" fill="var(--accent-wash)"/>
+        <line x1="24" y1="20" x2="24" y2="96" stroke="var(--loss)" stroke-width="2" stroke-dasharray="3 3"/>
+        <circle cx="24" cy="86" r="4" fill="var(--loss)"/>
+        <text x="30" y="16" font-size="12" fill="var(--loss)" class="barval">you exit  ~day 2</text>
+        <line x1="340" y1="16" x2="340" y2="30" stroke="var(--accent)" stroke-width="2"/>
+        <circle cx="340" cy="30" r="4" fill="var(--accent)"/>
+        <text x="340" y="12" font-size="12" fill="var(--accent)" class="barval" text-anchor="middle">move peaks  ~day 14</text>
+        <text x="0" y="112" font-size="11" fill="var(--ink-soft)">entry</text>
+        <text x="270" y="112" font-size="11" fill="var(--ink-soft)" text-anchor="middle">day 10</text>
+        <text x="540" y="112" font-size="11" fill="var(--ink-soft)" text-anchor="end">day 20</text>
+      </svg>
+      <figcaption>65% of winning moves are still building after trading-day 10.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <p class="eyebrow" style="color:var(--ink-soft)">The evidence  /  3 of 3</p>
+    <h2>Just holding longer flips the book</h2>
+    <p class="sub">Same entries, same trades. Replace the two-day exit with a fixed hold and re-price the options. Nothing else changes.</p>
+    <figure class="fig">
+      <svg viewBox="0 0 560 200" role="img" aria-label="Realized profit and loss goes from minus 824 dollars now, plus 1240 with a 15-day hold, plus 4170 with a 20-day hold.">
+        <line x1="0" y1="150" x2="540" y2="150" stroke="var(--line)" stroke-width="1.5"/>
+        <!-- now -->
+        <rect x="20" y="150" width="130" height="26" fill="var(--loss)" opacity="0.85"/>
+        <text x="85" y="192" font-size="12" fill="var(--ink-soft)" text-anchor="middle">now</text>
+        <text x="85" y="142" font-size="13" class="barval" fill="var(--loss)" text-anchor="middle">-$824</text>
+        <!-- 15d -->
+        <rect x="215" y="112" width="130" height="38" fill="var(--accent)"/>
+        <text x="280" y="192" font-size="12" fill="var(--ink-soft)" text-anchor="middle">hold 15 days</text>
+        <text x="280" y="104" font-size="13" class="barval" fill="var(--accent)" text-anchor="middle">+$1,240</text>
+        <!-- 20d -->
+        <rect x="410" y="40" width="130" height="110" fill="var(--accent)"/>
+        <text x="475" y="192" font-size="12" fill="var(--ink-soft)" text-anchor="middle">hold 20 days</text>
+        <text x="475" y="32" font-size="13" class="barval" fill="var(--accent)" text-anchor="middle">+$4,170</text>
+      </svg>
+      <figcaption>Profit factor 0.96 to 1.14 to 1.35. Win rate 36% to 45%.</figcaption>
+    </figure>
+    <p style="margin-top:1.5rem"><b>Why it works even though you'd hold the losers longer too:</b> a losing option can't drop past -100%, you only paid the premium. A winning option can run +100% to +300%. Hold everything longer and the extra downside is capped; the extra upside isn't.</p>
+  </section>
+
+  <section>
+    <h2>What turned out not to matter</h2>
+    <ul class="didnt">
+      <li><b>The setup "score."</b> The top-rated setups won <i>less</i> often than the middle-rated ones. It doesn't predict outcomes, don't screen on it.</li>
+      <li><b>Contract length, on its own.</b> Long-dated contracts were just a tell that you'd already chased a hot, extended move. The problem was the chase, not the expiry.</li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">The fix</p>
+    <h2>Six rules</h2>
+    <p class="sub">Every one is about what you do <i>after</i> you're in. The entries can stay exactly as they are.</p>
+    <div class="actions">
+      <ol>
+        <li><span class="act-h">Minimum hold: three weeks.</span><span class="act-d">~15 trading days on anything that isn't stopped out. Closer to four weeks for beaten-down "bottom-fish" entries, those develop slowest.</span></li>
+        <li><span class="act-h">Use a time-stop, not a flinch.</span><span class="act-d">If it hasn't moved your way by day 10, <i>then</i> reassess. Don't bail on day 2 just because the position is red, that's when the move usually hasn't started.</span></li>
+        <li><span class="act-h">Don't chase.</span><span class="act-d">Skip entries already up more than ~25% in the last month, or more than ~40% off their 3-month low. If you take one anyway: small size and a hard stop, the losses there are lopsided.</span></li>
+        <li><span class="act-h">Lean into your real edge.</span><span class="act-d">Beaten-down reversal / bottom-fish setups are your strongest book (~65%+ and holding). Take more of those, fewer momentum chases.</span></li>
+        <li><span class="act-h">Buy the right contract.</span><span class="act-d">At-the-money or slightly in-the-money, roughly two months out. Not cheap far-out-of-the-money lottery tickets, they need a bigger move just to break even.</span></li>
+        <li><span class="act-h">Stop scoring the setup.</span><span class="act-d">It isn't a useful filter. Spend that attention on the hold instead.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <p class="kicker">
+    <b>Basis:</b> 255 closed options round-trips, April-August 2026. Realized -$824 after commissions, 36% win rate, 0.96 profit factor.<br>
+    <b>Method:</b> "worked" = a 10%-plus favourable underlying move within 20 trading days. The hold counterfactual re-prices each contract with Black-Scholes (implied vol from the actual entry premium, -15% haircut on calls for the typical IV drop on a rally). Directional, not a guaranteed number.<br>
+    <b>Full analysis:</b> setup-analysis-2026-08-30 and its 2026-09-01 follow-up.
+  </p>
+
+</div>
