@@ -43,7 +43,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-        run: echo "result=$(python check_synced.py)" >> "$GITHUB_OUTPUT"
+        run: echo "result=$(python check_synced.py account_summary)" >> "$GITHUB_OUTPUT"
 
       - name: Run sync
         if: steps.check.outputs.result != 'skip'

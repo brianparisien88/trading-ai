@@ -745,7 +745,7 @@ function renderOnchainTradesRibbon(){
 
 function renderOnchainHero(){
   const s = ONCHAIN_SUMMARY || {};
-  renderSyncStatus('syncStatusOnchain', 'Onchain data', s.synced_at, 12, 30);
+  renderSyncStatus('syncStatusOnchain', 'Onchain data', s.synced_at, 12, 46);
   const el = document.getElementById('heroOnchain');
   if(!el) return;
   const pnlWin = s.pnl_window_usd, winDays = s.pnl_window_days;

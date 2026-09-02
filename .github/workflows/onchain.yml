@@ -8,8 +8,17 @@ name: Sync onchain wallet to Supabase
 
 on:
   schedule:
-    - cron: '30 12 * * *'   # 30 min after the IBKR sync, so they don't race on Supabase
-  workflow_dispatch:
+    # Primary: 12:46 UTC -- 16 min after the IBKR sync's 12:16 primary (so
+    # they don't race on Supabase), and off the :00/:15/:30/:45 marks GitHub
+    # Actions' scheduler is busiest at (see sync.yml for the 14-minute delay
+    # that motivated moving both off round minutes, 2026-09-02).
+    - cron: '46 12 * * *'
+    # Fallback: 13:03 UTC, 17 minutes later (also off a round minute). Runs
+    # check_synced.py onchain_summary first -- only proceeds if today's
+    # primary tick never landed. `concurrency` below means a false-positive
+    # double-trigger just queues behind the primary rather than racing it.
+    - cron: '3 13 * * *'
+  workflow_dispatch:        # manual "Run workflow" button — always syncs, no check
 
 concurrency:
   group: onchain-sync
@@ -25,7 +34,18 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r sync/requirements.txt
+
+      - name: Check whether today's onchain sync already ran (fallback tick only)
+        id: check
+        if: github.event.schedule == '3 13 * * *'
+        working-directory: sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: echo "result=$(python check_synced.py onchain_summary)" >> "$GITHUB_OUTPUT"
+
       - name: Run onchain sync
+        if: steps.check.outputs.result != 'skip'
         working-directory: sync
         env:
           ZERION_API_KEY: ${{ secrets.ZERION_API_KEY }}
