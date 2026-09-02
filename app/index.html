@@ -11,30 +11,30 @@
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif; -webkit-font-smoothing:antialiased;}
   .mono{font-family:ui-monospace,'SF Mono','Roboto Mono','JetBrains Mono',Menlo,monospace;}
   #app{max-width:1220px; margin:0 auto; padding:20px 16px 60px;}
-  h1{font-size:15px; font-weight:600; letter-spacing:.01em; margin:0 0 2px;}
-  .subtitle{color:var(--dim); font-size:12px; margin-bottom:16px;}
+  h1{font-size:22px; font-weight:700; letter-spacing:.01em; margin:0 0 2px; color:var(--green);}
+  .subtitle{color:var(--dim); font-size:13px; margin-bottom:16px;}
 
   /* auth bar */
-  .authbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px;
+  .authbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px;
     background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 12px; margin-bottom:16px;}
   .authbar .who{color:var(--muted);}
   .authbar .who b{color:var(--text); font-weight:600;}
   .authbar input{background:var(--bg); border:1px solid var(--border); color:var(--text);
-    border-radius:6px; padding:6px 9px; font-size:12.5px; outline:none;}
+    border-radius:6px; padding:6px 9px; font-size:13.5px; outline:none;}
   .authbar input:focus{border-color:var(--blue);}
   .authbar button{background:var(--surface2); border:1px solid var(--border); color:var(--text);
-    border-radius:6px; padding:6px 12px; font-size:12.5px; cursor:pointer;}
+    border-radius:6px; padding:6px 12px; font-size:13.5px; cursor:pointer;}
   .authbar button:hover{border-color:var(--dim);}
   .authbar .err{color:var(--red);}
   .authbar .ok{color:var(--green);}
 
   .banner{background:rgba(229,72,77,.1); border:1px solid rgba(229,72,77,.4); color:var(--red);
-    border-radius:8px; padding:10px 12px; font-size:12.5px; margin-bottom:16px; display:none;}
+    border-radius:8px; padding:10px 12px; font-size:13.5px; margin-bottom:16px; display:none;}
   .banner.show{display:block;}
 
   .tabs{display:flex; gap:2px; background:var(--border); border:1px solid var(--border); border-radius:9px;
     padding:2px; margin-bottom:16px; width:fit-content;}
-  .tab{padding:8px 18px; border-radius:7px; font-size:13px; font-weight:500; color:var(--muted); cursor:pointer; user-select:none;}
+  .tab{padding:8px 18px; border-radius:7px; font-size:14px; font-weight:500; color:var(--muted); cursor:pointer; user-select:none;}
   .tab.active{background:var(--surface); color:var(--text);}
 
   .hero{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--border);
@@ -43,87 +43,87 @@
   .hero.hero4{grid-template-columns:repeat(4,1fr);}
   .hero.hero8{grid-template-columns:repeat(8,1fr);}
   .stat{background:var(--surface); padding:14px 12px;}
-  .stat-label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
+  .stat-label{font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
   .stat-th{text-transform:none; letter-spacing:0; opacity:.75; font-weight:400;}
-  label.chk{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); cursor:pointer; user-select:none; white-space:nowrap;}
+  label.chk{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; user-select:none; white-space:nowrap;}
   label.chk input{accent-color:var(--amber); cursor:pointer;}
   .badge.rec{background:rgba(212,167,44,.15); color:var(--amber);}
-  .stat-val{font-size:17px; font-weight:600;}
-  .stat-sub{font-size:10.5px; color:var(--muted); margin-top:3px;}
+  .stat-val{font-size:18px; font-weight:600;}
+  .stat-sub{font-size:11.5px; color:var(--muted); margin-top:3px;}
   .pos{color:var(--green);} .neg{color:var(--red);}
 
   .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap;}
-  .synced{font-size:11.5px; color:var(--dim);}
-  .sync-status{font-size:11.5px; color:var(--dim); margin:-6px 0 12px;}
+  .synced{font-size:12.5px; color:var(--dim);}
+  .sync-status{font-size:12.5px; color:var(--dim); margin:-6px 0 12px;}
   .linkbtn{background:none; border:1px solid var(--border); color:var(--muted); border-radius:6px;
-    padding:4px 10px; font-size:12px; cursor:pointer;}
+    padding:4px 10px; font-size:13px; cursor:pointer;}
   .linkbtn:hover{color:var(--text); border-color:var(--muted);}
   .stratmgr{background:var(--surface); border:1px solid var(--border); border-radius:8px;
     padding:12px 14px; margin-bottom:12px; max-width:560px;}
-  .stratmgr .srow{display:flex; align-items:center; gap:8px; padding:4px 0; font-size:12.5px;}
+  .stratmgr .srow{display:flex; align-items:center; gap:8px; padding:4px 0; font-size:13.5px;}
   .stratmgr .srow .lbl{flex:1;}
-  .stratmgr .srow .cnt{color:var(--dim); font-size:11px;}
-  .stratmgr .srow button{background:none; border:0; color:var(--red); cursor:pointer; font-size:13px; padding:2px 6px;}
+  .stratmgr .srow .cnt{color:var(--dim); font-size:12px;}
+  .stratmgr .srow button{background:none; border:0; color:var(--red); cursor:pointer; font-size:14px; padding:2px 6px;}
   .stratmgr .addrow{display:flex; gap:8px; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;}
   .stratmgr .addrow input{flex:1; background:var(--surface2); border:1px solid var(--border);
-    color:var(--text); border-radius:6px; padding:6px 9px; font-size:12.5px; outline:none;}
+    color:var(--text); border-radius:6px; padding:6px 9px; font-size:13.5px; outline:none;}
   .stratmgr .addrow button{background:var(--blue); border:0; color:#fff; border-radius:6px;
-    padding:6px 14px; font-size:12.5px; cursor:pointer;}
-  .stratmgr .mgrnote{font-size:11px; color:var(--dim); margin-top:8px;}
+    padding:6px 14px; font-size:13.5px; cursor:pointer;}
+  .stratmgr .mgrnote{font-size:12px; color:var(--dim); margin-top:8px;}
   input.search{background:var(--surface); border:1px solid var(--border); color:var(--text);
-    border-radius:7px; padding:7px 10px; font-size:13px; width:160px; outline:none;}
+    border-radius:7px; padding:7px 10px; font-size:14px; width:160px; outline:none;}
   input.search:focus{border-color:var(--blue);}
 
-  table.ledger{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.ledger{width:100%; border-collapse:collapse; font-size:13.5px;}
   table.ledger thead th{
-    text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim);
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim);
     padding:8px 10px; border-bottom:1px solid var(--border); cursor:pointer; white-space:nowrap; user-select:none;
   }
   table.ledger thead th:hover{color:var(--text);}
   table.ledger thead th.sorted{color:var(--blue);}
-  .arrow{font-size:9px; margin-left:3px; opacity:.7;}
+  .arrow{font-size:10px; margin-left:3px; opacity:.7;}
   .copyid{cursor:pointer; white-space:nowrap;}
   .copyid:hover{color:var(--blue);}
   table.ledger td{padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:middle;}
   table.ledger tbody tr:hover{background:var(--surface);}
   table.ledger tbody tr.main-row{cursor:pointer;}
   .sym{font-weight:600; letter-spacing:.02em;}
-  .desc{color:var(--muted); font-size:11px;}
-  .badge{font-size:9.5px; padding:2px 6px; border-radius:4px; background:var(--surface2); color:var(--muted); display:inline-block;}
+  .desc{color:var(--muted); font-size:12px;}
+  .badge{font-size:10.5px; padding:2px 6px; border-radius:4px; background:var(--surface2); color:var(--muted); display:inline-block;}
   .badge.warn{background:rgba(212,167,44,.15); color:var(--amber);}
   .badge.side-put{background:rgba(212,167,44,.13); color:var(--amber);}
   .badge.side-call{background:rgba(74,158,255,.13); color:var(--blue);}
-  .journal-flag{font-size:10px; color:var(--dim);}
+  .journal-flag{font-size:11px; color:var(--dim);}
   .journal-flag.filled{color:var(--green);}
-  .empty{padding:24px 10px; text-align:center; color:var(--dim); font-size:12.5px;}
+  .empty{padding:24px 10px; text-align:center; color:var(--dim); font-size:13.5px;}
 
   .expand-row{display:none;}
   .expand-row.open{display:table-row;}
   .expand-cell{padding:10px 16px 16px !important; background:var(--surface2);}
-  .flag-note{font-size:11.5px; color:var(--amber); margin-bottom:8px; padding:6px 8px; background:rgba(212,167,44,.08); border-radius:6px;}
-  .lock-note{font-size:11px; color:var(--dim); margin-bottom:8px; padding:6px 8px; background:var(--surface); border-radius:6px;}
-  .context{font-size:12px; color:var(--text); margin-bottom:12px; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:6px; line-height:1.7;}
-  .scorekey{font-size:11px; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-bottom:12px; line-height:1.9;}
+  .flag-note{font-size:12.5px; color:var(--amber); margin-bottom:8px; padding:6px 8px; background:rgba(212,167,44,.08); border-radius:6px;}
+  .lock-note{font-size:12px; color:var(--dim); margin-bottom:8px; padding:6px 8px; background:var(--surface); border-radius:6px;}
+  .context{font-size:13px; color:var(--text); margin-bottom:12px; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:6px; line-height:1.7;}
+  .scorekey{font-size:12px; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-bottom:12px; line-height:1.9;}
   .scorekey b{color:var(--text); font-weight:600; display:inline-block; min-width:92px;}
   .scorekey .g{color:var(--dim);}
-  .context div span:first-child{display:inline-block; min-width:96px; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim);}
+  .context div span:first-child{display:inline-block; min-width:96px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim);}
   .field{margin-top:8px;}
-  .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim); margin-bottom:5px;}
+  .field label{display:block; font-size:11.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim); margin-bottom:5px;}
   .field textarea, .field select{width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text);
-    border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; resize:vertical; outline:none;}
+    border-radius:6px; padding:8px 10px; font-size:14px; font-family:inherit; resize:vertical; outline:none;}
   .field textarea{min-height:56px;}
   .field textarea:focus, .field select:focus{border-color:var(--blue);}
   .field textarea:disabled, .field select:disabled, .field input:disabled{opacity:.55; cursor:not-allowed;}
-  .save-note{font-size:10.5px; color:var(--dim); margin-top:6px;}
+  .save-note{font-size:11.5px; color:var(--dim); margin-top:6px;}
   .save-note.err{color:var(--red); font-weight:600;}
 
   .more{display:block; width:100%; padding:10px; margin-top:10px; background:var(--surface);
-    border:1px solid var(--border); border-radius:8px; color:var(--muted); font-size:12.5px; cursor:pointer; text-align:center;}
+    border:1px solid var(--border); border-radius:8px; color:var(--muted); font-size:13.5px; cursor:pointer; text-align:center;}
   .more:hover{color:var(--text); border-color:var(--dim);}
 
   .panel{display:none;}
   .panel.active{display:block;}
-  .data-note{font-size:11px; color:var(--dim); margin-top:10px; font-style:italic;}
+  .data-note{font-size:12px; color:var(--dim); margin-top:10px; font-style:italic;}
 
   @media(max-width:1100px){ .hero.hero8{grid-template-columns:repeat(4,1fr);} }
   @media(max-width:800px){
@@ -151,20 +151,20 @@
   <div class="panel" id="panel-analyze">
     <div style="max-width:560px;">
       <div class="field"><label>Ticker</label>
-        <input id="anTicker" placeholder="e.g. NVDA" style="width:140px; text-transform:uppercase; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; outline:none;">
+        <input id="anTicker" placeholder="e.g. NVDA" style="width:140px; text-transform:uppercase; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:14px; outline:none;">
         <label class="chk" style="display:inline-flex; margin-left:14px;"><input type="radio" name="anSide" value="call" checked> call</label>
         <label class="chk" style="display:inline-flex; margin-left:8px;"><input type="radio" name="anSide" value="put"> put</label>
       </div>
       <div class="field"><label>Setup strategy</label>
-        <select id="anStrategy" style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; outline:none;">
+        <select id="anStrategy" style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:14px; outline:none;">
           <option value="Default">Default — baseline technical check</option>
         </select>
-        <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">Reads the chart as a reversal / continuation / chop entry and scores it on that basis (a fade wants overextension; a continuation wants room to run). Strategy selector is not yet wired — the intent is detected from price.</div>
+        <div style="font-size:11.5px; color:var(--dim); margin-top:4px;">Reads the chart as a reversal / continuation / chop entry and scores it on that basis (a fade wants overextension; a continuation wants room to run). Strategy selector is not yet wired — the intent is detected from price.</div>
       </div>
       <div class="field"><label>Thesis / journal note</label>
-        <textarea id="anThesis" placeholder="Why you're considering this trade..." style="width:100%; min-height:56px; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; resize:vertical; outline:none;"></textarea></div>
-      <button id="anRun" style="background:var(--blue); border:none; color:#fff; border-radius:6px; padding:9px 18px; font-size:13px; font-weight:500; cursor:pointer;">Analyze</button>
-      <span id="anMsg" style="font-size:12px; margin-left:10px; color:var(--muted);"></span>
+        <textarea id="anThesis" placeholder="Why you're considering this trade..." style="width:100%; min-height:56px; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:14px; font-family:inherit; resize:vertical; outline:none;"></textarea></div>
+      <button id="anRun" style="background:var(--blue); border:none; color:#fff; border-radius:6px; padding:9px 18px; font-size:14px; font-weight:500; cursor:pointer;">Analyze</button>
+      <span id="anMsg" style="font-size:13px; margin-left:10px; color:var(--muted);"></span>
     </div>
     <div class="scorekey" id="scoreKeyAnalyze" style="margin-top:16px; max-width:560px;"></div>
     <div id="anResult" style="margin-top:14px;"></div>
@@ -194,14 +194,14 @@
       <div class="synced" id="onchainWallet" style="font-family:var(--mono,monospace);"></div>
       <div class="synced" id="syncedOnchain"></div>
     </div>
-    <div style="font-size:12px; color:var(--muted); margin:14px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Holdings</div>
+    <div style="font-size:13px; color:var(--muted); margin:14px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Holdings</div>
     <table class="ledger" id="tableOnchainHoldings">
       <thead><tr id="theadOnchainHoldings"></tr></thead>
       <tbody id="rowsOnchainHoldings"></tbody>
     </table>
-    <div style="font-size:12px; color:var(--muted); margin:22px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Round-trip trades <span style="opacity:.6; font-weight:400;">· all time</span></div>
+    <div style="font-size:13px; color:var(--muted); margin:22px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Round-trip trades <span style="opacity:.6; font-weight:400;">· all time</span></div>
     <div class="hero hero8" id="heroOnchainDist"></div>
-    <div style="font-size:11px; color:var(--dim); margin:10px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Rolling 1 year</div>
+    <div style="font-size:12px; color:var(--dim); margin:10px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Rolling 1 year</div>
     <div class="hero hero8" id="heroOnchainDist1y" style="margin-bottom:12px;"></div>
     <table class="ledger" id="tableOnchainTrades">
       <thead><tr id="theadOnchainTrades"></tr></thead>
@@ -213,6 +213,7 @@
 
   <!-- CLOSED TAB -->
   <div class="panel" id="panel-closed">
+    <div class="sync-status" id="syncStatusClosed"></div>
     <div class="hero hero5" id="heroClosed"></div>
     <div class="hero hero5" id="heroClosedDist" style="margin-top:-10px;"></div>
     <div class="toolbar">
@@ -296,7 +297,7 @@ function strategyFieldHTML(current, id){
   return `<div class="field strat-field">
       <label>Strategy</label>
       <select data-field="strategy"${idAttr} ${dis}>${strategyOptionsHTML(current)}</select>
-      ${canEdit() ? `<button type="button" class="linkbtn strat-open" style="margin-top:6px;font-size:11px;">＋ add / manage list</button>
+      ${canEdit() ? `<button type="button" class="linkbtn strat-open" style="margin-top:6px;font-size:12px;">＋ add / manage list</button>
         <div class="stratmgr strat-inline" style="display:none;margin-top:8px;"></div>` : ''}
     </div>`;
 }
@@ -600,15 +601,15 @@ async function runAnalyze(){
     const tierCol = d.tier==='strong'?'var(--green)':d.tier==='ok'?'var(--muted)':'var(--red)';
     out.innerHTML = `<div class="context" style="max-width:560px;">
       <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
-        <div><span class="sym" style="font-size:15px;">${d.ticker}</span> <span style="color:var(--dim); font-size:11px;">${d.name||''}</span></div>
-        <div class="mono" style="font-size:18px; color:${tierCol}; font-weight:600;">Setup ${d.score>=0?'+':''}${d.score} <span style="font-size:11px;">${d.tier}</span></div>
+        <div><span class="sym" style="font-size:16px;">${d.ticker}</span> <span style="color:var(--dim); font-size:12px;">${d.name||''}</span></div>
+        <div class="mono" style="font-size:19px; color:${tierCol}; font-weight:600;">Setup ${d.score>=0?'+':''}${d.score} <span style="font-size:12px;">${d.tier}</span></div>
       </div>
       <div><span>Price</span> $${Number(d.price).toFixed(2)} <span style="color:var(--dim)">· 20-day $${d.s20} · 50-day $${d.s50} · ${d.ret20>=0?'+':''}${d.ret20}% 20d · ${d.range_pct}% of range${d.intent?` · ${d.intent} entry`:''}</span></div>
       ${d.criteria.map(c=>`<div><span>${c.name}</span> <span class="${c.pass?'pos':'neg'}">${c.pass?'✓':'✗'}</span> ${c.detail}</div>`).join('')}
       <div style="border-top:1px solid var(--border); margin-top:10px; padding-top:10px;">
         <div><span>Suggested strike</span> ${d.recommended_contract.strike}</div>
         <div><span>Suggested DTE</span> ${d.recommended_contract.dte}</div>
-        <div style="color:var(--dim); font-size:11px; margin-top:4px;">${d.recommended_contract.note}</div>
+        <div style="color:var(--dim); font-size:12px; margin-top:4px;">${d.recommended_contract.note}</div>
       </div>
       ${document.getElementById('anThesis').value.trim() ? `<div style="border-top:1px solid var(--border); margin-top:10px; padding-top:10px;"><span>Your thesis</span> ${document.getElementById('anThesis').value.trim().replace(/</g,'&lt;')}</div>` : ''}
     </div>`;
@@ -1089,6 +1090,7 @@ function computeStats(trades){
 }
 
 function renderHeroClosed(){
+  renderSyncStatus('syncStatusClosed', 'Trading data', ACCOUNT && ACCOUNT.synced_at, 12, 0);
   const s = computeStats(CLOSED_RAW);
   const net = s.totalPnl - s.totalComm;
   document.getElementById('heroClosed').innerHTML = `
@@ -1196,7 +1198,7 @@ async function saveJournal(table, id, obj){
 // Shared journal editor: renders into cellEl and wires autosave against `table`.
 function mountJournalEditor(cellEl, table, id, j){
   const dis = canEdit() ? '' : 'disabled';
-  const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;";
+  const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:14px; font-family:inherit; outline:none;";
   cellEl.innerHTML =
     (canEdit() ? '' : `<div class="lock-note">Read-only — log in (top of page) to edit these fields.</div>`) +
     strategyFieldHTML(j.strategy) + `
@@ -1318,10 +1320,10 @@ function miniChart(t){
   for(let i=0;i<n;i++){ price += (i?'L':'M')+X(i).toFixed(1)+','+Y(vals[i]).toFixed(1)+' '; }
   for(let i=0;i<n;i++){ mline += (i?'L':'M')+X(i).toFixed(1)+','+Y(sma(i,20)).toFixed(1)+' '; }
   let gy=''; const step=Math.max(1,Math.ceil((mx-mn)/4));
-  for(let g=mn; g<=mx; g+=step){ gy += `<line x1="${padL}" x2="${W-padR}" y1="${Y(g)}" y2="${Y(g)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-5}" y="${Y(g)+3}" text-anchor="end" font-size="9" fill="var(--dim)">$${g}</text>`; }
+  for(let g=mn; g<=mx; g+=step){ gy += `<line x1="${padL}" x2="${W-padR}" y1="${Y(g)}" y2="${Y(g)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-5}" y="${Y(g)+3}" text-anchor="end" font-size="10" fill="var(--dim)">$${g}</text>`; }
   const vmark = (i,c) => i<0?'':`<line x1="${X(i)}" x2="${X(i)}" y1="${padT}" y2="${H-padB}" stroke="${c}" stroke-width="1" stroke-dasharray="2,2" opacity="0.55"/>`;
   const held = (iIn>=0&&iOut>=0) ? `<rect x="${X(iIn)}" y="${padT}" width="${Math.max(0,X(iOut)-X(iIn))}" height="${H-padT-padB}" fill="var(--blue)" opacity="0.07"/>` : '';
-  const dot = (i,c,lbl) => i<0?'':`<circle cx="${X(i)}" cy="${Y(vals[i])}" r="3.5" fill="${c}"/>${lbl?`<text x="${X(i)}" y="${Y(vals[i])-8}" text-anchor="${i>n-8?'end':'middle'}" font-size="9" fill="${c}">${lbl} $${vals[i].toFixed(2)}</text>`:''}`;
+  const dot = (i,c,lbl) => i<0?'':`<circle cx="${X(i)}" cy="${Y(vals[i])}" r="3.5" fill="${c}"/>${lbl?`<text x="${X(i)}" y="${Y(vals[i])-8}" text-anchor="${i>n-8?'end':'middle'}" font-size="10" fill="${c}">${lbl} $${vals[i].toFixed(2)}</text>`:''}`;
   return `<div class="context" style="line-height:1.3;">
     <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${t.sym} price around the trade, entry to exit +15 days">
       ${gy}${held}${vmark(iIn,'var(--green)')}${vmark(iOut,'var(--blue)')}
@@ -1329,7 +1331,7 @@ function miniChart(t){
       <path d="${price}" fill="none" stroke="var(--text)" stroke-width="1.5" stroke-linejoin="round"/>
       ${dot(iIn,'var(--green)','in')}${dot(iOut,'var(--blue)','out')}${dot(i15,'var(--amber)','+15d')}${dot(iNow,'var(--blue)','now')}
     </svg>
-    <div style="display:flex;gap:14px;font-size:10px;color:var(--dim);margin-top:4px;flex-wrap:wrap;">
+    <div style="display:flex;gap:14px;font-size:11px;color:var(--dim);margin-top:4px;flex-wrap:wrap;">
       <span style="color:var(--muted)">close</span><span>20-day avg</span>
       <span style="color:var(--green)">● entry</span>${iNow>=0?'<span style="color:var(--blue)">● latest</span>':'<span style="color:var(--blue)">● exit</span><span style="color:var(--amber)">● exit +15 trading days</span>'}
     </div>
@@ -1346,7 +1348,7 @@ function renderBody(id, ambNote){
   const entryPx = t ? t.entry_px : null;
   const exitPx = t ? t.exit_px : null;
   const dis = canEdit() ? '' : 'disabled';
-  const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; outline:none;";
+  const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:14px; font-family:inherit; outline:none;";
   cell.innerHTML =
     (ambNote ? `<div class="flag-note">${ambNote}</div>` : '') +
     contextBlock(t) +
