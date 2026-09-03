@@ -156,7 +156,7 @@
       "column": "strategy",
       "default": null,
       "nullable": true,
-      "type": "text"
+      "type": "ARRAY"
     },
     {
       "column": "journal_thoughts",
@@ -878,7 +878,7 @@
       "column": "strategy",
       "default": null,
       "nullable": true,
-      "type": "text"
+      "type": "ARRAY"
     },
     {
       "column": "journal_thoughts",

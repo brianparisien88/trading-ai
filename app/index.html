@@ -46,6 +46,7 @@
   .stat-label{font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
   .stat-th{text-transform:none; letter-spacing:0; opacity:.75; font-weight:400;}
   label.chk{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; user-select:none; white-space:nowrap;}
+  .strat-multi{display:flex; flex-wrap:wrap; gap:5px 16px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:6px;}
   label.chk input{accent-color:var(--amber); cursor:pointer;}
   .badge.rec{background:rgba(212,167,44,.15); color:var(--amber);}
   .stat-val{font-size:18px; font-weight:600;}
@@ -265,13 +266,18 @@ let sortClosed = {key:'exit_time', dir:-1};
 // the Trade History tab (⚙ Strategies). Deleting an option never changes a
 // trade's saved strategy value.
 let STRATEGY_OPTIONS = [];
-function strategyOptionsHTML(current){
+// Strategy is multi-select: `current` is an array of labels (possibly empty).
+function strategyCheckboxesHTML(current){
   const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const cur = Array.isArray(current) ? current : (current ? [current] : []);
   const list = STRATEGY_OPTIONS.slice();
   // keep any previously-saved value that isn't in the current list, so it's never lost
-  if(current && !list.includes(current)) list.push(current);
-  return `<option value="">--</option>` + list.map(o =>
-    `<option value="${esc(o)}" ${current===o?'selected':''}>${esc(o)}</option>`).join('');
+  for(const c of cur) if(c && !list.includes(c)) list.push(c);
+  if(!list.length) return `<div style="color:var(--dim); font-size:12.5px;">No strategy options yet — add one below.</div>`;
+  const dis = canEdit() ? '' : 'disabled';
+  return list.map(o =>
+    `<label class="chk"><input type="checkbox" value="${esc(o)}" ${cur.includes(o)?'checked':''} ${dis}> ${esc(o)}</label>`
+  ).join('');
 }
 
 /* ---------- editable Strategy list — inline in the journal editor ----------
@@ -286,17 +292,16 @@ async function reloadStrategyOptions(){
 }
 function strategyUsageCount(label){
   let n = 0;
-  for(const t of CLOSED_RAW) if((journalCache[t.id]||{}).strategy === label) n++;
-  for(const o of OPEN_RAW)   if((journalCache[o.id]||{}).strategy === label) n++;
+  for(const t of CLOSED_RAW) if(((journalCache[t.id]||{}).strategy||[]).includes(label)) n++;
+  for(const o of OPEN_RAW)   if(((journalCache[o.id]||{}).strategy||[]).includes(label)) n++;
   return n;
 }
-// The Strategy field block for a journal editor: label + select + (signed-in) manager.
+// The Strategy field block for a journal editor: label + checkboxes (multi-select) + (signed-in) manager.
 function strategyFieldHTML(current, id){
-  const dis = canEdit() ? '' : 'disabled';
   const idAttr = id != null ? ` data-id="${id}"` : '';
   return `<div class="field strat-field">
       <label>Strategy</label>
-      <select data-field="strategy"${idAttr} ${dis}>${strategyOptionsHTML(current)}</select>
+      <div class="strat-multi" data-field="strategy"${idAttr}>${strategyCheckboxesHTML(current)}</div>
       ${canEdit() ? `<button type="button" class="linkbtn strat-open" style="margin-top:6px;font-size:12px;">＋ add / manage list</button>
         <div class="stratmgr strat-inline" style="display:none;margin-top:8px;"></div>` : ''}
     </div>`;
@@ -350,10 +355,9 @@ function renderStratInline(panel){
 // selection) and any open inline manager. The saved Strategy column values don't
 // change, so the tables are left alone.
 function refreshStrategyUI(){
-  document.querySelectorAll('select[data-field="strategy"]').forEach(sel=>{
-    const v = sel.value;
-    sel.innerHTML = strategyOptionsHTML(v);
-    sel.value = v;
+  document.querySelectorAll('.strat-multi[data-field="strategy"]').forEach(el=>{
+    const cur = Array.from(el.querySelectorAll('input:checked')).map(c=>c.value);
+    el.innerHTML = strategyCheckboxesHTML(cur);
   });
   document.querySelectorAll('.strat-inline').forEach(p=>{ if(p.style.display !== 'none') renderStratInline(p); });
 }
@@ -455,7 +459,7 @@ function mapOpen(r){
     chart_read_entry: r.chart_read_entry,
     unverified_entry_date: r.unverified_entry_date,
     synced_at: r.synced_at,
-    strategy: r.strategy || '',
+    strategy: r.strategy || [],
     journal_thoughts: r.journal_thoughts || '',
     planned_stop: r.planned_stop,
     planned_target: r.planned_target,
@@ -510,7 +514,7 @@ function mapClosed(r){
     grade_points: r.grade_points,
     grade_reasons: r.grade_reasons,
     // journal fields live on the row itself now
-    strategy: r.strategy || '',
+    strategy: r.strategy || [],
     journal_thoughts: r.journal_thoughts || '',
     planned_stop: r.planned_stop,
     planned_target: r.planned_target,
@@ -1002,7 +1006,7 @@ function renderRowsOpen(){
   body.innerHTML = filtered.map(o => {
     const j = journalCache[o.id] || {};
     return `<tr class="main-row" onclick="toggleOpenRow('${o.id}')">
-      <td class="sym">${o.sym}${o.unverified_entry_date?' <span class="badge warn">entry?</span>':''} <span class="journal-flag" id="oflag-${o.id}">${(j.strategy||j.thoughts)?'logged':'—'}</span></td>
+      <td class="sym">${o.sym}${o.unverified_entry_date?' <span class="badge warn">entry?</span>':''} <span class="journal-flag" id="oflag-${o.id}">${((j.strategy&&j.strategy.length)||j.thoughts)?'logged':'—'}</span></td>
       <td class="desc col-hide">${o.desc}</td>
       <td>${fmtSide(o.contract_type)}</td>
       <td class="mono" style="color:var(--muted)">${o.entry_px!=null?'@'+o.entry_px:'—'}</td>
@@ -1020,8 +1024,8 @@ function renderRowsOpen(){
 function updateOpenFlag(id){
   const el = document.getElementById('oflag-'+id); if(!el) return;
   const j = journalCache[id] || {};
-  el.textContent = (j.strategy||j.thoughts) ? 'logged' : '—';
-  el.classList.toggle('filled', !!(j.strategy||j.thoughts));
+  el.textContent = ((j.strategy&&j.strategy.length)||j.thoughts) ? 'logged' : '—';
+  el.classList.toggle('filled', !!((j.strategy&&j.strategy.length)||j.thoughts));
 }
 async function toggleOpenRow(id){
   const row = document.getElementById('oexp-'+id);
@@ -1035,7 +1039,7 @@ function renderOpenBody(id){
   const cell = document.getElementById('ocell-'+id);
   if(!cell) return;
   const o = OPEN_RAW.find(x=>x.id===id) || {};
-  const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
+  const j = journalCache[id] || {strategy:[],thoughts:'',stop:'',target:''};
   const px = v => v==null ? '—' : '$'+Number(v).toFixed(2);
   const held = o.entry_time ? daysHeld(o.entry_time) : null;
   const moveTxt = o.u_move==null ? '' :
@@ -1168,13 +1172,13 @@ const journalCache = {};
 const openRowsState = {};
 
 function loadJournal(id){
-  return journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
+  return journalCache[id] || {strategy:[],thoughts:'',stop:'',target:''};
 }
 async function saveJournal(table, id, obj){
   if(!canEdit()) return {ok:false, msg:'Log in to save'};
   const num = v => (v === '' || v == null) ? null : (isNaN(Number(v)) ? null : Number(v));
   const patch = {
-    strategy: obj.strategy || null,
+    strategy: (obj.strategy && obj.strategy.length) ? obj.strategy : null,
     journal_thoughts: obj.thoughts || null,
     planned_stop: num(obj.stop),
     planned_target: num(obj.target),
@@ -1185,7 +1189,7 @@ async function saveJournal(table, id, obj){
     if(!error){
       const pool = table === 'open_positions' ? OPEN_RAW : CLOSED_RAW;
       const row = pool.find(x=>x.id===id);
-      if(row){ row.strategy=patch.strategy||''; row.journal_thoughts=patch.journal_thoughts||'';
+      if(row){ row.strategy=patch.strategy||[]; row.journal_thoughts=patch.journal_thoughts||'';
         row.planned_stop=patch.planned_stop; row.planned_target=patch.planned_target; }
       return {ok:true};
     }
@@ -1196,6 +1200,15 @@ async function saveJournal(table, id, obj){
 }
 
 // Shared journal editor: renders into cellEl and wires autosave against `table`.
+// Read a journal editor field's current value. The strategy field is a
+// checkbox container (data-field="strategy", no native .value) -> read
+// checked boxes; everything else is a normal input/select/textarea.
+function fieldValue(el){
+  return el.getAttribute('data-field') === 'strategy'
+    ? Array.from(el.querySelectorAll('input:checked')).map(c=>c.value)
+    : el.value;
+}
+
 function mountJournalEditor(cellEl, table, id, j){
   const dis = canEdit() ? '' : 'disabled';
   const inputStyle = "width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:8px 10px; font-size:14px; font-family:inherit; outline:none;";
@@ -1215,11 +1228,11 @@ function mountJournalEditor(cellEl, table, id, j){
   wireStrategyField(cellEl);
   cellEl.querySelectorAll('[data-field]').forEach(el=>{
     let timer;
-    el.addEventListener('input', ()=>{
+    const onChange = ()=>{
       clearTimeout(timer);
       const note = cellEl.querySelector('[data-note]');
       timer = setTimeout(async ()=>{
-        j[el.getAttribute('data-field')] = el.value;
+        j[el.getAttribute('data-field')] = fieldValue(el);
         journalCache[id] = j;
         if(note){ note.textContent='Saving...'; note.classList.remove('err'); note.style.color='var(--dim)'; }
         const res = await saveJournal(table, id, j);
@@ -1231,7 +1244,9 @@ function mountJournalEditor(cellEl, table, id, j){
         if(table==='open_positions') updateOpenFlag(id);
         else { updateFlag(id); updateStrategyCell(id); }
       }, 500);
-    });
+    };
+    el.addEventListener('input', onChange);
+    el.addEventListener('change', onChange);
   });
 }
 
@@ -1341,7 +1356,7 @@ function miniChart(t){
 }
 
 function renderBody(id, ambNote){
-  const j = journalCache[id] || {strategy:'',thoughts:'',stop:'',target:''};
+  const j = journalCache[id] || {strategy:[],thoughts:'',stop:'',target:''};
   const cell = document.getElementById('cell-'+id);
   if(!cell) return;
   const t = CLOSED_RAW.find(x=>x.id===id);
@@ -1370,12 +1385,12 @@ function renderBody(id, ambNote){
   wireStrategyField(cell);
   cell.querySelectorAll('[data-field]').forEach(el=>{
     let timer;
-    el.addEventListener('input', ()=>{
+    const onChange = ()=>{
       clearTimeout(timer);
       const note = document.getElementById('save-'+id);
       timer = setTimeout(async ()=>{
         const fid = el.getAttribute('data-id');
-        journalCache[fid][el.getAttribute('data-field')] = el.value;
+        journalCache[fid][el.getAttribute('data-field')] = fieldValue(el);
         if(note){ note.textContent = 'Saving...'; note.classList.remove('err'); note.style.color='var(--dim)'; }
         const res = await saveJournal('closed_trades', fid, journalCache[fid]);
         if(note){
@@ -1391,11 +1406,13 @@ function renderBody(id, ambNote){
         const rrEl = document.getElementById('rr-'+fid);
         if(rrEl){ rrEl.textContent = rrText(journalCache[fid], entryPx, exitPx); }
       }, 500);
-    });
+    };
+    el.addEventListener('input', onChange);
+    el.addEventListener('change', onChange);
   });
 }
 
-function hasJournalContent(j){ return j && (j.strategy || j.thoughts); }
+function hasJournalContent(j){ return j && ((j.strategy && j.strategy.length) || j.thoughts); }
 function updateFlag(id){
   const flag = document.getElementById('flag-'+id);
   if(!flag) return;
@@ -1407,7 +1424,7 @@ function updateStrategyCell(id){
   const cell = document.getElementById('strat-'+id);
   if(!cell) return;
   const j = journalCache[id];
-  cell.textContent = (j && j.strategy) ? j.strategy : '—';
+  cell.textContent = (j && j.strategy && j.strategy.length) ? j.strategy.join(', ') : '—';
 }
 
 function fmtReturn(v){
@@ -1423,7 +1440,7 @@ function renderRowsClosed(){
     (!onlyRecovered || t.recovered));
   filtered = filtered.slice().sort((a,b)=>{
     let av=a[sortClosed.key], bv=b[sortClosed.key];
-    if(sortClosed.key==='strategy'){ av=(journalCache[a.id]||{}).strategy||''; bv=(journalCache[b.id]||{}).strategy||''; }
+    if(sortClosed.key==='strategy'){ av=((journalCache[a.id]||{}).strategy||[]).join(', '); bv=((journalCache[b.id]||{}).strategy||[]).join(', '); }
     if(av==null) av = sortClosed.key.includes('time') ? '' : -Infinity;
     if(bv==null) bv = sortClosed.key.includes('time') ? '' : -Infinity;
     if(typeof av === 'string') return av.localeCompare(bv) * sortClosed.dir;
@@ -1435,7 +1452,7 @@ function renderRowsClosed(){
     document.getElementById('loadMore').style.display='none'; return; }
   let html = '';
   for(const t of slice){
-    const j = journalCache[t.id] || {strategy:'',thoughts:'',stop:'',target:''};
+    const j = journalCache[t.id] || {strategy:[],thoughts:'',stop:'',target:''};
     html += `<tr class="main-row" id="main-${t.id}" onclick="toggleRow('${t.id}')">
       <td class="mono">${fmtDateShort(t.exit_time)}</td>
       <td class="mono">${fmtDateShort(t.entry_time)}</td>
@@ -1450,7 +1467,7 @@ function renderRowsClosed(){
       <td class="mono">${fmtSinceExit(t.since_exit)}</td>
       <td class="mono" style="color:var(--${t.contract_open?'blue':'dim'})" title="${t.contract_open?'contract still open — verdict is provisional':'expired'}">${fmtExpiry(t.contract_expiry)}</td>
       <td>${fmtVerdict(t.since_exit)}</td>
-      <td id="strat-${t.id}">${j.strategy || '—'}</td>
+      <td id="strat-${t.id}">${(j.strategy&&j.strategy.length) ? j.strategy.join(', ') : '—'}</td>
     </tr>
     <tr class="expand-row" id="exp-${t.id}"><td class="expand-cell" colspan="${CLOSED_COLS.length}" id="cell-${t.id}"></td></tr>`;
   }
