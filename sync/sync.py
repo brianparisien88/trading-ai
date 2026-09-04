@@ -1102,19 +1102,33 @@ def main() -> None:
     vix = fetch_vix(since_date)
     log(f"  VIX history: {len(vix)} days")
 
-    closed_rows = []
-    carried = 0
+    # Two separate upserts, not one -- PostgREST's bulk insert/upsert requires
+    # every object in the JSON array to have IDENTICAL keys (PGRST102 "All
+    # object keys must match" otherwise). `closed` re-derives the FULL closed
+    # history every run, and only the handful of trades that just closed with
+    # a still-matching open_positions note get the 4 journal keys added --
+    # mixing those into the same batch as the hundreds of untouched rows
+    # (which must omit the keys entirely, so the upsert leaves their existing
+    # journal values alone) breaks PostgREST's homogeneity requirement. This
+    # was a latent bug since the carry-over feature shipped (2026-08-30) --
+    # it just hadn't hit a day where some trades carried a note and others
+    # didn't in the same run until 2026-09-04.
+    closed_rows, carried_rows = [], []
     for t in closed:
         row = closed_row(t, now_iso, contracts, prices, vix)
         note = (open_notes.get(t.get("entry_order"))
                 or open_notes.get(f"{row['symbol']}|{row.get('contract_description')}"))
         if note:
-            row.update({k: v for k, v in note.items() if v is not None})
-            carried += 1
-        closed_rows.append(row)
-    sb.upsert("closed_trades", closed_rows)
-    log(f"closed_trades: upserted {len(closed_rows)} rows "
-        f"({carried} carried journal notes from a just-closed position)")
+            row.update({k: note.get(k) for k in JCOLS})  # all 4 keys, uniformly, on every carried row
+            carried_rows.append(row)
+        else:
+            closed_rows.append(row)
+    if closed_rows:
+        sb.upsert("closed_trades", closed_rows)
+    if carried_rows:
+        sb.upsert("closed_trades", carried_rows)
+    log(f"closed_trades: upserted {len(closed_rows) + len(carried_rows)} rows "
+        f"({len(carried_rows)} carried journal notes from a just-closed position)")
 
     open_rows = [open_row(p, now_iso, pos_contracts, prices, order_by_conid) for p in opened]
     if open_rows:
