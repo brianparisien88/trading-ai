@@ -641,6 +641,18 @@
       "default": null,
       "nullable": true,
       "type": "integer"
+    },
+    {
+      "column": "pay_yourself_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
+    },
+    {
+      "column": "pay_yourself_since",
+      "default": null,
+      "nullable": true,
+      "type": "date"
     }
   ],
   "onchain_trades": [
