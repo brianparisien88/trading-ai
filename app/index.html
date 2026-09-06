@@ -190,7 +190,7 @@
   <!-- ONCHAIN TAB -->
   <div class="panel" id="panel-onchain">
     <div class="sync-status" id="syncStatusOnchain"></div>
-    <div class="hero" id="heroOnchain"></div>
+    <div class="hero hero5" id="heroOnchain"></div>
     <div class="toolbar">
       <div class="synced" id="onchainWallet" style="font-family:var(--mono,monospace);"></div>
       <div class="synced" id="syncedOnchain"></div>
@@ -202,14 +202,14 @@
     </table>
     <div style="font-size:13px; color:var(--muted); margin:22px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Round-trip trades <span style="opacity:.6; font-weight:400;">· all time</span></div>
     <div class="hero hero8" id="heroOnchainDist"></div>
-    <div style="font-size:12px; color:var(--dim); margin:10px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Rolling 1 year</div>
+    <div style="font-size:12px; color:var(--dim); margin:10px 0 6px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">Since Nov 1, 2025</div>
     <div class="hero hero8" id="heroOnchainDist1y" style="margin-bottom:12px;"></div>
     <table class="ledger" id="tableOnchainTrades">
       <thead><tr id="theadOnchainTrades"></tr></thead>
       <tbody id="rowsOnchainTrades"></tbody>
     </table>
     <div class="more" id="loadMoreOnchain" style="display:none;">Show more</div>
-    <div class="data-note">Wallet activity from the <strong>Zerion API</strong>, refreshed on the daily sync. A <strong>round-trip trade</strong> pairs a buy of a token (from a stablecoin, ETH/BNB, or another token) against later sells, FIFO. A <strong>token→token</strong> swap closes one position and opens another at the swap's USD value. Partial sells leave the remainder as an open holding. LP, staking, bridging and airdrops are ignored; swaps that don't fit a round-trip are counted as <em>unmatched activity</em>. <strong>Pay Yourself</strong> = stablecoin sent from this wallet to a confirmed real-world cash-out address (Lulubit, Crypto.com) since Nov 1, 2025, accumulating forward — not a rolling window, and not counted against Realized P&amp;L, since taking profit off-chain to spend isn't a loss. <strong>Realized P&amp;L</strong> = sum of the matched round-trips below; <strong>all-in</strong> is Zerion's figure which additionally includes gas, ETH/BNB moves, and unattributed flow. <strong>Value change</strong> is the raw portfolio delta over the window and includes any deposits/withdrawals. Holdings show <em>our</em> FIFO cost basis; positions acquired by transfer / bridge / wrap show no cost. Positions worth under $3 are hidden. <strong>Total Fees</strong> = on-chain gas + <em>swap spread</em> (value given up minus value received on each swap — LP fee + slippage + price impact). Each swap's spread is capped at ±3–12% of its size to drop bad thin-token price prints; the ~%/swap shown is the rate measured only on well-priced swaps. Raw un-capped spread runs a bit higher. Prices are USD at block time per Zerion; spam tokens filtered by Zerion. Click a Coin ID to copy the contract address.</div>
+    <div class="data-note">Wallet activity from the <strong>Zerion API</strong>, refreshed on the daily sync. A <strong>round-trip trade</strong> pairs a buy of a token (from a stablecoin, ETH/BNB, or another token) against later sells, FIFO. A <strong>token→token</strong> swap closes one position and opens another at the swap's USD value. Partial sells leave the remainder as an open holding. LP, staking, bridging and airdrops are ignored; swaps that don't fit a round-trip are counted as <em>unmatched activity</em>. <strong>Pay Yourself</strong> = stablecoin sent from this wallet to a confirmed real-world cash-out address (Lulubit, Crypto.com) since Nov 1, 2025, accumulating forward — not a rolling window, and not counted against Realized P&amp;L, since taking profit off-chain to spend isn't a loss. The <strong>Realized P&amp;L</strong> tile above is since Nov 1, 2025 (fixed, not rolling) and net of gas + spread on those same trades. Further down, <strong>Total P&amp;L</strong> in the all-time ribbon = sum of every matched round-trip ever; <strong>all-in</strong> is Zerion's figure which additionally includes gas, ETH/BNB moves, and unattributed flow, over the same all-time span. Holdings show <em>our</em> FIFO cost basis; positions acquired by transfer / bridge / wrap show no cost. Positions worth under $3 are hidden. <strong>Total Fees</strong> = on-chain gas + <em>swap spread</em> (value given up minus value received on each swap — LP fee + slippage + price impact). Each swap's spread is capped at ±3–12% of its size to drop bad thin-token price prints; the ~%/swap shown is the rate measured only on well-priced swaps. Raw un-capped spread runs a bit higher. Prices are USD at block time per Zerion; spam tokens filtered by Zerion. Click a Coin ID to copy the contract address.</div>
   </div>
 
   <!-- CLOSED TAB -->
@@ -732,17 +732,17 @@ function renderOnchainTradesRibbon(){
     const sW1 = num(s.small_winners_1y, '—'), sL1 = num(s.small_losers_1y, '—');
     const pct = (a,b) => (a!=null && Number(b)) ? Math.round(a/Number(b)*100)+'% of all-time' : '';
     el1.innerHTML =
-      tile('Trades <span class="stat-th">1 yr</span>',
+      tile('Trades <span class="stat-th">since 11/25</span>',
            n1==null?'—':n1.toLocaleString(), '', pct(n1, n)) +
-      tile('P&amp;L <span class="stat-th">1 yr</span>',
+      tile('P&amp;L <span class="stat-th">since 11/25</span>',
            p1==null?'—':fmtUsd(p1), p1>=0?'pos':'neg', pct(p1, total)) +
-      tile('Avg P&amp;L / Trade <span class="stat-th">1 yr</span>',
+      tile('Avg P&amp;L / Trade <span class="stat-th">since 11/25</span>',
            (n1 && p1!=null)?fmtUsd(p1/n1):'—', (p1>=0?'pos':'neg')) +
-      tile('Big Winners <span class="stat-th">1 yr · &ge; $200</span>', bW1, 'pos', pct(bW1, bigW)) +
-      tile('Big Losers <span class="stat-th">1 yr · &ge; $200</span>', bL1, 'neg', pct(bL1, bigL)) +
-      tile('Small Winners <span class="stat-th">1 yr · &lt; $50</span>', sW1, 'pos', pct(sW1, smW)) +
-      tile('Small Losers <span class="stat-th">1 yr · &lt; $50</span>', sL1, 'neg', pct(sL1, smL)) +
-      tile('Fees <span class="stat-th">1 yr</span>',
+      tile('Big Winners <span class="stat-th">since 11/25 · &ge; $200</span>', bW1, 'pos', pct(bW1, bigW)) +
+      tile('Big Losers <span class="stat-th">since 11/25 · &ge; $200</span>', bL1, 'neg', pct(bL1, bigL)) +
+      tile('Small Winners <span class="stat-th">since 11/25 · &lt; $50</span>', sW1, 'pos', pct(sW1, smW)) +
+      tile('Small Losers <span class="stat-th">since 11/25 · &lt; $50</span>', sL1, 'neg', pct(sL1, smL)) +
+      tile('Fees <span class="stat-th">since 11/25</span>',
            fmtUsd(fee1), 'neg', `gas ${fmtUsd(g1,0)} · spread ${fmtUsd(f1,0)} · ${pct(fee1, fees)}`);
   }
 }
@@ -752,19 +752,14 @@ function renderOnchainHero(){
   renderSyncStatus('syncStatusOnchain', 'Onchain data', s.synced_at, 12, 46);
   const el = document.getElementById('heroOnchain');
   if(!el) return;
-  const pnlWin = s.pnl_window_usd, winDays = s.pnl_window_days;
-  const winLbl = winDays ? (winDays>=360 ? '1-yr' : winDays+'d') : '';
-  const rm = s.realized_matched_usd, rall = s.realized_pnl_all_usd;
+  const rss = s.realized_since_start_usd;
   el.innerHTML = `
     <div class="stat"><div class="stat-label">Portfolio Value</div>
       <div class="stat-val mono">${fmtUsd(s.portfolio_value_usd)}</div>
       <div class="stat-sub">${s.open_position_count!=null?s.open_position_count:ONCHAIN_HOLDINGS.length} positions · ${s.trade_count!=null?s.trade_count.toLocaleString():'—'} trades</div></div>
-    <div class="stat"><div class="stat-label">${winLbl} Value Change</div>
-      <div class="stat-val mono ${pnlWin>=0?'pos':'neg'}">${fmtUsd(pnlWin)}</div>
-      <div class="stat-sub">${s.pnl_window_start||''}${s.pnl_window_end?' → '+s.pnl_window_end:''} · incl. deposits</div></div>
     <div class="stat"><div class="stat-label">Realized P&amp;L</div>
-      <div class="stat-val mono ${rm>=0?'pos':'neg'}">${fmtUsd(rm)}</div>
-      <div class="stat-sub">matched round-trips${rall!=null?` · all-in ${fmtUsd(rall)} (gas/native)`:''}${s.unmatched_activity?` · ${s.unmatched_activity} unmatched`:''}</div></div>
+      <div class="stat-val mono ${rss>=0?'pos':'neg'}">${fmtUsd(rss)}</div>
+      <div class="stat-sub">since 11/1/2025 · net of gas &amp; spread</div></div>
     <div class="stat"><div class="stat-label">Pay Yourself</div>
       <div class="stat-val mono">${fmtUsd(s.pay_yourself_usd)}</div>
       <div class="stat-sub">stablecoin cashed out${s.pay_yourself_since?` · since ${new Date(s.pay_yourself_since+'T00:00:00').toLocaleDateString()}`:''} · not a loss</div></div>
