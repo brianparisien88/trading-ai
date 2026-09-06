@@ -152,14 +152,27 @@ def zpaged(path: str, params: dict) -> list:
 # ---------------------------------------------------------------------------
 # parsing helpers
 # ---------------------------------------------------------------------------
-def _fung(attr: dict) -> dict:
+def _fung(attr: dict, chain: str | None = None) -> dict:
+    """`chain`, when known, picks the matching entry out of a multi-chain
+    token's `implementations` list (e.g. USDC exists on 40+ chains) instead
+    of blindly taking the first one -- which could silently be a DIFFERENT
+    chain's contract address than the one actually being reported on.
+    Confirmed bug 2026-09: a Solana USDC holding showed a "0g"-chain address.
+    """
     fi = attr.get("fungible_info") or {}
     impls = fi.get("implementations") or []
-    impl = impls[0] if impls else {}
+    impl = None
+    if chain:
+        impl = next((i for i in impls if i.get("chain_id") == chain), None)
+    if impl is None:
+        impl = impls[0] if impls else {}
+    addr = impl.get("address") or None
+    if addr and addr.startswith("0x"):   # EVM hex is case-insensitive; Solana
+        addr = addr.lower()              # base58 is NOT -- never lowercase that
     return {
         "symbol": (fi.get("symbol") or "").upper() or None,
         "name": fi.get("name"),
-        "address": (impl.get("address") or "").lower() or None,
+        "address": addr,
         "chain": impl.get("chain_id"),
         "verified": bool((fi.get("flags") or {}).get("verified")),
     }
@@ -193,11 +206,12 @@ def fetch_positions(wallet: str, chains: str) -> list[dict]:
     out = []
     for p in raw:
         a = p.get("attributes") or {}
-        f = _fung(a)
+        chain = _chain_of(p)
+        f = _fung(a, chain=chain)
         qty = (a.get("quantity") or {}).get("float")
         out.append({
             "wallet": wallet,
-            "chain": _chain_of(p) or f["chain"],
+            "chain": chain or f["chain"],
             "symbol": f["symbol"],
             "name": f["name"],
             "address": f["address"],
@@ -225,12 +239,13 @@ def fetch_trades(wallet: str, chains: str) -> list[dict]:
         mined = a.get("mined_at")  # unix seconds
         ts = (datetime.fromtimestamp(mined, timezone.utc).isoformat().replace("+00:00", "Z")
               if isinstance(mined, (int, float)) else a.get("mined_at"))
+        tx_chain = _chain_of(tx)
         sold, bought = [], []
         for tr in a.get("transfers") or []:
-            f = _fung(tr)
+            f = _fung(tr, chain=tx_chain)
             leg = {
                 "symbol": f["symbol"], "name": f["name"], "address": f["address"],
-                "chain": _chain_of(tx) or f["chain"],
+                "chain": tx_chain or f["chain"],
                 "qty": abs(float(tr.get("quantity", {}).get("float") or 0) or 0),
                 "usd": tr.get("value"),
                 "price": tr.get("price"),
@@ -248,7 +263,7 @@ def fetch_trades(wallet: str, chains: str) -> list[dict]:
         trades.append({
             "hash": a.get("hash"),
             "time": ts,
-            "chain": _chain_of(tx),
+            "chain": tx_chain,
             "sold": sold,
             "bought": bought,
             "fee_usd": fee_usd,
