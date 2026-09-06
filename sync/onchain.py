@@ -196,6 +196,7 @@ def fetch_positions(wallet: str, chains: str) -> list[dict]:
         f = _fung(a)
         qty = (a.get("quantity") or {}).get("float")
         out.append({
+            "wallet": wallet,
             "chain": _chain_of(p) or f["chain"],
             "symbol": f["symbol"],
             "name": f["name"],
@@ -474,10 +475,16 @@ def _tid(r: dict, seq: int) -> str:
 def build(wallet: str, chains: str, now_iso: str):
     log("fetching Zerion positions / trades / pnl / chart")
     positions = fetch_positions(wallet, chains)
+    # Solana holdings only -- not trades/FIFO. This wallet is EVM-only, so the
+    # user's separate Solana wallet (already tracked for Pay Yourself) is
+    # merged in here purely for current balances/value. No swaps are fetched
+    # for it, so these holdings carry no cost basis (same "no cost" treatment
+    # already used for transfer/bridge/wrap-acquired positions).
+    positions += fetch_positions(PAY_YOURSELF_SOL_WALLET, "solana")
     swaps = fetch_trades(wallet, chains)
     pnl = fetch_pnl(wallet, chains)
     pay_yourself = fetch_pay_yourself_usd(wallet, chains)
-    log(f"  {len(positions)} positions, {len(swaps)} swap txns, "
+    log(f"  {len(positions)} positions (incl. solana), {len(swaps)} swap txns, "
         f"pay-yourself ${pay_yourself:,.2f} since {PAY_YOURSELF_START[:10]}")
 
     if not swaps:
@@ -540,7 +547,7 @@ def build(wallet: str, chains: str, now_iso: str):
         if val < MIN_HOLDING:
             continue
         holdings.append({
-            "id": k, "wallet": wallet, "chain": p["chain"], "symbol": sym,
+            "id": k, "wallet": p["wallet"], "chain": p["chain"], "symbol": sym,
             "name": p["name"], "token_address": p["address"],
             "quantity": p["quantity"], "price": p["price"], "value_usd": val,
             "cost_basis_usd": cost, "avg_entry_price": avg_entry,
