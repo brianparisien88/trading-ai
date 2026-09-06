@@ -71,6 +71,21 @@ BLUECHIP = {
 }
 
 
+# "Pay Yourself" -- stablecoin sent off-chain to actually spend in the real
+# world, tracked separately from trading P&L (a cash-out is not a loss).
+# Fixed start date, not a rolling window -- keeps accumulating from here on.
+# User-confirmed real cash-out destinations (lowercased). The Lulubit SOL
+# address isn't listed: it's a Solana destination, but this wallet is EVM-only,
+# so a transfer from it could never appear in this wallet's own history -- it
+# would need the user's own Solana wallet tracked as a second source. Confirm
+# with the user before adding it here once/if that's wired up.
+PAY_YOURSELF_ADDRESSES = {
+    "0x50b50d879034b18b122f8b6ac66fe84593e0be2a",  # Lulubit (ETH/EVM)
+    "0x1c3eba9f65b60a1bd6061f177f9f7f6c0c8195aa",  # Crypto.com
+}
+PAY_YOURSELF_START = "2025-11-01T00:00:00Z"
+
+
 def _trusted(leg: dict) -> bool:
     s = (leg.get("symbol") or "").upper()
     return is_cashlike(s) or s in BLUECHIP or bool(leg.get("verified"))
@@ -242,6 +257,41 @@ def fetch_year_chart(wallet: str, chains: str) -> dict:
         return {}
 
 
+def fetch_pay_yourself_usd(wallet: str, chains: str) -> float:
+    """Stablecoin sent to a known cash-out address (PAY_YOURSELF_ADDRESSES)
+    since PAY_YOURSELF_START -- a fixed date, not a rolling window, so this
+    keeps accumulating rather than resetting. Best-effort: an API hiccup
+    here shouldn't fail the whole sync, so it returns 0.0 and logs rather
+    than raising (this figure isn't relied on elsewhere the way trades are)."""
+    try:
+        start_ms = int(datetime.fromisoformat(
+            PAY_YOURSELF_START.replace("Z", "+00:00")).timestamp() * 1000)
+        raw = zpaged(f"/wallets/{wallet}/transactions/", {
+            "currency": "usd",
+            "filter[operation_types]": "send",
+            "filter[chain_ids]": chains,
+            "filter[min_mined_at]": start_ms,
+            "page[size]": 100,
+        })
+    except TransientError as e:
+        log(f"  (pay-yourself fetch unavailable: {e})")
+        return 0.0
+    total = 0.0
+    for tx in raw:
+        a = tx.get("attributes") or {}
+        if a.get("operation_type") != "send":
+            continue
+        for tr in a.get("transfers") or []:
+            if tr.get("direction") != "out":
+                continue
+            f = _fung(tr)
+            if not is_stable(f["symbol"]):
+                continue
+            if (tr.get("recipient") or "").lower() in PAY_YOURSELF_ADDRESSES:
+                total += tr.get("value") or 0
+    return round(total, 2)
+
+
 # ---------------------------------------------------------------------------
 # FIFO trade matching
 # ---------------------------------------------------------------------------
@@ -406,7 +456,9 @@ def build(wallet: str, chains: str, now_iso: str):
     swaps = fetch_trades(wallet, chains)
     pnl = fetch_pnl(wallet, chains)
     chart = fetch_year_chart(wallet, chains)
-    log(f"  {len(positions)} positions, {len(swaps)} swap txns")
+    pay_yourself = fetch_pay_yourself_usd(wallet, chains)
+    log(f"  {len(positions)} positions, {len(swaps)} swap txns, "
+        f"pay-yourself ${pay_yourself:,.2f} since {PAY_YOURSELF_START[:10]}")
 
     if not swaps:
         raise TransientError("Zerion returned 0 trade transactions -- transient "
@@ -585,6 +637,8 @@ def build(wallet: str, chains: str, now_iso: str):
         "big_losers_1y": big_l_1y,
         "small_winners_1y": small_w_1y,
         "small_losers_1y": small_l_1y,
+        "pay_yourself_usd": pay_yourself,
+        "pay_yourself_since": PAY_YOURSELF_START[:10],
         "synced_at": now_iso,
     }
     return holdings, trades, summary
