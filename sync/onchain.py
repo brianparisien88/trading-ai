@@ -629,6 +629,12 @@ def build(wallet: str, chains: str, now_iso: str):
     # are still computed below (harmless, other views may still want the
     # all-time figures) but no longer the dashboard's top-line number.
     realized_since_start = round(realized_1y - gas_fees_1y - friction_1y, 2)
+    # Same netting, all-time (user's call, 2026-09-06): the ribbons' "Total
+    # P&L" / "P&L since 11/25" tiles were showing gross P&L next to a
+    # separate Fees tile, inconsistent with the hero tile already netting
+    # fees in -- P&L should just encompass costs, full stop. Fees tiles
+    # dropped from the dashboard now that both P&L numbers are net.
+    realized_all_time_net = round(realized_matched - gas_fees - friction, 2)
 
     summary = {
         "id": "current", "wallet": wallet,
@@ -641,6 +647,7 @@ def build(wallet: str, chains: str, now_iso: str):
         "pnl_window_days": None, "pnl_window_start": None,
         "pnl_window_end": None, "pnl_window_usd": None,
         "realized_since_start_usd": realized_since_start,
+        "realized_all_time_net_usd": realized_all_time_net,
         "realized_matched_usd": realized_matched,
         "realized_pnl_all_usd": pnl.get("realized_gain"),   # Zerion all-in (gas/native/unattributed); may be None
         "unrealized_pnl_usd": pnl.get("unrealized_gain",
