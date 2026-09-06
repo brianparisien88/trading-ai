@@ -83,6 +83,15 @@ PAY_YOURSELF_ADDRESSES = {
     "0x50b50d879034b18b122f8b6ac66fe84593e0be2a",  # Lulubit (ETH/EVM)
     "0x1c3eba9f65b60a1bd6061f177f9f7f6c0c8195aa",  # Crypto.com
 }
+# Solana destination + the user's OWN Solana wallet (the source -- this wallet
+# is EVM-only, so a Solana-bound transfer could never appear in its history;
+# it has to come from a second, separately-tracked wallet). Solana addresses
+# are base58 and case-SENSITIVE -- do not .lower() these, unlike the EVM set
+# above where hex is case-insensitive.
+PAY_YOURSELF_ADDRESSES_SOL = {
+    "FdfNcbrRHqCnnfhA79R49DCT2AKuRWyd3TcsrwSZzuN",  # Lulubit (Solana)
+}
+PAY_YOURSELF_SOL_WALLET = "Ft2TgrJ6i9oU3gdi5wxnsH8Q8RWgu8qzKrbx5gUgAK4e"  # user's own Solana wallet
 PAY_YOURSELF_START = "2025-11-01T00:00:00Z"
 
 
@@ -257,12 +266,11 @@ def fetch_year_chart(wallet: str, chains: str) -> dict:
         return {}
 
 
-def fetch_pay_yourself_usd(wallet: str, chains: str) -> float:
-    """Stablecoin sent to a known cash-out address (PAY_YOURSELF_ADDRESSES)
-    since PAY_YOURSELF_START -- a fixed date, not a rolling window, so this
-    keeps accumulating rather than resetting. Best-effort: an API hiccup
-    here shouldn't fail the whole sync, so it returns 0.0 and logs rather
-    than raising (this figure isn't relied on elsewhere the way trades are)."""
+def _pay_yourself_sent_to(wallet: str, chains: str, addresses: set[str], case_sensitive: bool) -> float:
+    """Stablecoin sent from `wallet` to any of `addresses` since
+    PAY_YOURSELF_START. Best-effort: an API hiccup here shouldn't fail the
+    whole sync, so it returns 0.0 and logs rather than raising (this figure
+    isn't relied on elsewhere the way trades are)."""
     try:
         start_ms = int(datetime.fromisoformat(
             PAY_YOURSELF_START.replace("Z", "+00:00")).timestamp() * 1000)
@@ -274,8 +282,10 @@ def fetch_pay_yourself_usd(wallet: str, chains: str) -> float:
             "page[size]": 100,
         })
     except TransientError as e:
-        log(f"  (pay-yourself fetch unavailable: {e})")
+        log(f"  (pay-yourself fetch unavailable for {wallet}: {e})")
         return 0.0
+    norm = (lambda s: s.lower()) if not case_sensitive else (lambda s: s)
+    target = {norm(a) for a in addresses}
     total = 0.0
     for tx in raw:
         a = tx.get("attributes") or {}
@@ -287,8 +297,20 @@ def fetch_pay_yourself_usd(wallet: str, chains: str) -> float:
             f = _fung(tr)
             if not is_stable(f["symbol"]):
                 continue
-            if (tr.get("recipient") or "").lower() in PAY_YOURSELF_ADDRESSES:
+            if norm(tr.get("recipient") or "") in target:
                 total += tr.get("value") or 0
+    return total
+
+
+def fetch_pay_yourself_usd(wallet: str, chains: str) -> float:
+    """Sum of stablecoin cashed out to a confirmed real-world destination,
+    since PAY_YOURSELF_START (fixed date, not a rolling window -- keeps
+    accumulating). Two sources: the main EVM wallet (Lulubit ETH, Crypto.com)
+    and the user's separate Solana wallet (Lulubit SOL) -- see the module
+    constants for why a second wallet is needed at all."""
+    total = _pay_yourself_sent_to(wallet, chains, PAY_YOURSELF_ADDRESSES, case_sensitive=False)
+    total += _pay_yourself_sent_to(PAY_YOURSELF_SOL_WALLET, "solana",
+                                    PAY_YOURSELF_ADDRESSES_SOL, case_sensitive=True)
     return round(total, 2)
 
 
