@@ -17,7 +17,9 @@ back with an open lot is counted in `unmatched_activity`.
 Env:
   ZERION_API_KEY       zk_prod_... (read-only portfolio data; used as HTTP Basic user)
   ONCHAIN_WALLET       0x... (default: the address below)
-  ONCHAIN_CHAINS       comma list of Zerion chain ids (default: ethereum,binance-smart-chain)
+  ONCHAIN_CHAINS       comma list of Zerion chain ids (default: ethereum,binance-smart-chain,
+                       polygon,optimism -- also set as the repo variable of the same name;
+                       keep both in sync if this ever changes again)
   SUPABASE_URL, SUPABASE_SECRET_KEY
 """
 from __future__ import annotations
@@ -35,7 +37,7 @@ from sync import Supabase, log, die  # reuse the PostgREST helper + logging
 
 ZERION_BASE = "https://api.zerion.io/v1"
 DEFAULT_WALLET = "0x3414ec2d1c63008e1cda0e2155b7334c446a0025"
-DEFAULT_CHAINS = "ethereum,binance-smart-chain"
+DEFAULT_CHAINS = "ethereum,binance-smart-chain,polygon,optimism"
 HTTP_TIMEOUT = 45
 
 
