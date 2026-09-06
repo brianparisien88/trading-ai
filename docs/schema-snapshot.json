@@ -659,6 +659,12 @@
       "default": null,
       "nullable": true,
       "type": "numeric"
+    },
+    {
+      "column": "realized_all_time_net_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
     }
   ],
   "onchain_trades": [
