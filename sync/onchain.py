@@ -29,7 +29,7 @@ import hashlib
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import requests
 
@@ -93,6 +93,14 @@ PAY_YOURSELF_ADDRESSES_SOL = {
 }
 PAY_YOURSELF_SOL_WALLET = "Ft2TgrJ6i9oU3gdi5wxnsH8Q8RWgu8qzKrbx5gUgAK4e"  # user's own Solana wallet
 PAY_YOURSELF_START = "2025-11-01T00:00:00Z"
+
+# Fixed start date for the "since Nov 2025" ribbon and the Realized P&L
+# headline -- replaces what used to be a rolling 365-day window (user's
+# call, 2026-09-06: a fixed anchor that keeps accumulating forward reads
+# better than a window that silently slides day to day). Same date as
+# PAY_YOURSELF_START today but kept as its own constant since the two
+# features could diverge later.
+WINDOW_START = "2025-11-01T00:00:00Z"
 
 
 def _trusted(leg: dict) -> bool:
@@ -254,15 +262,6 @@ def fetch_pnl(wallet: str, chains: str) -> dict:
         return (d.get("data") or {}).get("attributes") or {}
     except requests.RequestException as e:
         log(f"  (pnl endpoint unavailable: {e})")
-        return {}
-
-
-def fetch_year_chart(wallet: str, chains: str) -> dict:
-    try:
-        d = zget(f"/wallets/{wallet}/charts/year", {"currency": "usd", "filter[chain_ids]": chains})
-        return (d.get("data") or {}).get("attributes") or {}
-    except requests.RequestException as e:
-        log(f"  (chart endpoint unavailable: {e})")
         return {}
 
 
@@ -477,7 +476,6 @@ def build(wallet: str, chains: str, now_iso: str):
     positions = fetch_positions(wallet, chains)
     swaps = fetch_trades(wallet, chains)
     pnl = fetch_pnl(wallet, chains)
-    chart = fetch_year_chart(wallet, chains)
     pay_yourself = fetch_pay_yourself_usd(wallet, chains)
     log(f"  {len(positions)} positions, {len(swaps)} swap txns, "
         f"pay-yourself ${pay_yourself:,.2f} since {PAY_YOURSELF_START[:10]}")
@@ -563,13 +561,6 @@ def build(wallet: str, chains: str, now_iso: str):
 
     # ---- summary
     portfolio_value = coins_val + stables_val
-    pts = chart.get("points") or []
-    win_usd = win_start = win_end = win_days = None
-    if len(pts) >= 2:
-        win_usd = round((pts[-1][1] or 0) - (pts[0][1] or 0), 2)
-        win_start = datetime.fromtimestamp(pts[0][0], timezone.utc).date().isoformat()
-        win_end = datetime.fromtimestamp(pts[-1][0], timezone.utc).date().isoformat()
-        win_days = round((pts[-1][0] - pts[0][0]) / 86400)
     realized_matched = round(sum(t["realized_pnl_usd"] or 0 for t in trades), 2)
 
     def _bands(rows):
@@ -579,16 +570,15 @@ def build(wallet: str, chains: str, now_iso: str):
 
     big_w, big_l, small_w, small_l = _bands(trades)
 
-    _cut1y = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat().replace("+00:00", "Z")
-    _t1y = [t for t in trades if (t.get("exit_time") or "") >= _cut1y]
+    # "since Nov 2025" window -- fixed start (WINDOW_START), not rolling.
+    _t1y = [t for t in trades if (t.get("exit_time") or "") >= WINDOW_START]
     trade_count_1y = len(_t1y)
     realized_1y = round(sum(t["realized_pnl_usd"] or 0 for t in _t1y), 2)
     big_w_1y, big_l_1y, small_w_1y, small_l_1y = _bands(_t1y)
 
-    cutoff_1y = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat().replace("+00:00", "Z")
     gas_fees = round(sum(s.get("fee_usd") or 0 for s in swaps), 2)
     gas_fees_1y = round(sum(s.get("fee_usd") or 0 for s in swaps
-                            if (s.get("time") or "") >= cutoff_1y), 2)
+                            if (s.get("time") or "") >= WINDOW_START), 2)
 
     # --- execution spread (bid/ask + slippage + LP fee), de-noised ---------
     # per swap: value given up minus value received. Zerion prices thin tokens
@@ -612,7 +602,7 @@ def build(wallet: str, chains: str, now_iso: str):
         if dc != d:
             n_clamped += 1
         f_clamped += dc
-        if (s.get("time") or "") >= cutoff_1y:
+        if (s.get("time") or "") >= WINDOW_START:
             f_clamped_1y += dc
         if all(_trusted(x) for x in s["sold"] + s["bought"]):
             n_clean += 1
@@ -626,13 +616,24 @@ def build(wallet: str, chains: str, now_iso: str):
         f"clean {n_clean}/{n_priced} swaps rate {clean_rate*100:.2f}% -> ${rate_est:,.0f} "
         f"on ${all_vol:,.0f} volume")
 
+    # Realized P&L headline (user's call, 2026-09-06): since WINDOW_START,
+    # net of the gas + spread costs on those same trades -- not the old
+    # all-time matched/all-in split. realized_matched_usd / realized_pnl_all_usd
+    # are still computed below (harmless, other views may still want the
+    # all-time figures) but no longer the dashboard's top-line number.
+    realized_since_start = round(realized_1y - gas_fees_1y - friction_1y, 2)
+
     summary = {
         "id": "current", "wallet": wallet,
         "portfolio_value_usd": round(portfolio_value, 2),
         "value_in_coins_usd": round(coins_val, 2),
         "value_in_stables_usd": round(stables_val, 2),
-        "pnl_window_days": win_days, "pnl_window_start": win_start,
-        "pnl_window_end": win_end, "pnl_window_usd": win_usd,
+        # rolling 1-yr "value change" retired 2026-09-06 in favor of the fixed
+        # since-Nov-2025 window everywhere else on this tab -- explicitly
+        # nulled (not just omitted) so a stale figure never lingers unlabeled.
+        "pnl_window_days": None, "pnl_window_start": None,
+        "pnl_window_end": None, "pnl_window_usd": None,
+        "realized_since_start_usd": realized_since_start,
         "realized_matched_usd": realized_matched,
         "realized_pnl_all_usd": pnl.get("realized_gain"),   # Zerion all-in (gas/native/unattributed); may be None
         "unrealized_pnl_usd": pnl.get("unrealized_gain",

@@ -653,6 +653,12 @@
       "default": null,
       "nullable": true,
       "type": "date"
+    },
+    {
+      "column": "realized_since_start_usd",
+      "default": null,
+      "nullable": true,
+      "type": "numeric"
     }
   ],
   "onchain_trades": [
